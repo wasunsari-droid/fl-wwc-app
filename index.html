@@ -3152,22 +3152,126 @@ function showToast(msg, type='') {
 // =========================================================
 // EXPORT EXCEL
 // =========================================================
-function exportAll() {
+function ensureXLSX() {
+  return new Promise(function(resolve, reject) {
+    if (window.XLSX && window.XLSX.utils && window.XLSX.writeFile) {
+      resolve(window.XLSX);
+      return;
+    }
+    var existing = document.querySelector('script[data-xlsx-fallback="true"]');
+    if (existing) {
+      existing.addEventListener('load', function() { resolve(window.XLSX); });
+      existing.addEventListener('error', function() { reject(new Error('Cannot load XLSX library')); });
+      return;
+    }
+    var script = document.createElement('script');
+    script.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+    script.async = true;
+    script.setAttribute('data-xlsx-fallback', 'true');
+    script.onload = function() {
+      if (window.XLSX && window.XLSX.utils && window.XLSX.writeFile) resolve(window.XLSX);
+      else reject(new Error('XLSX library is unavailable after fallback load'));
+    };
+    script.onerror = function() { reject(new Error('Cannot load XLSX library')); };
+    document.head.appendChild(script);
+  });
+}
+
+
+function escapeExcelXml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function buildExcelXmlSheet(name, data, cols) {
+  var rows = ['<Row>' + cols.map(function(c) { return '<Cell><Data ss:Type="String">' + escapeExcelXml(c) + '</Data></Cell>'; }).join('') + '</Row>'];
+  data.forEach(function(record) {
+    rows.push('<Row>' + cols.map(function(c) {
+      return '<Cell><Data ss:Type="String">' + escapeExcelXml(record[c] || '') + '</Data></Cell>';
+    }).join('') + '</Row>');
+  });
+  return '<Worksheet ss:Name="' + escapeExcelXml(name).slice(0, 31) + '"><Table>' + rows.join('') + '</Table></Worksheet>';
+}
+
+function downloadExcelXml(sheets) {
+  var xml = '<?xml version="1.0" encoding="UTF-8"?>' +
+    '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">' +
+    sheets.join('') + '</Workbook>';
+  var blob = new Blob(['\ufeff', xml], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'FL_WWC_' + new Date().toISOString().slice(0,10) + '.xls';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
+}
+
+function getPhotoFieldKeys(photoFields) {
+  return (photoFields || []).map(function(p) { return p.key; });
+}
+
+async function photoExportLink(tab, recordId, fieldKey) {
+  var key = genImgKey(tab, recordId, fieldKey);
+  if (!idb) {
+    try { await openIDB(); } catch(e) { return ''; }
+  }
+  var data = await idbGet(key);
+  if (!data) return '';
+  if (typeof data === 'string' && data.startsWith('cloud:')) return data.slice(6);
+  return 'idb://' + key;
+}
+
+async function addPhotoLinksToRows(tab, data, photoFields) {
+  var rows = [];
+  for (var i = 0; i < (data || []).length; i++) {
+    var record = data[i] || {};
+    var out = Object.assign({}, record);
+    var recordId = record._id || i;
+    for (var j = 0; j < (photoFields || []).length; j++) {
+      var field = photoFields[j];
+      out[field.key] = await photoExportLink(tab, recordId, field.key);
+    }
+    rows.push(out);
+  }
+  return rows;
+}
+
+async function exportAll() {
+  try {
+  const XLSX = (window.XLSX && window.XLSX.utils && window.XLSX.writeFile) ? window.XLSX : null;
+  if (typeof DB==='undefined') { alert('ไม่พบฐานข้อมูล'); return; }
+  const rentCols = ['ลำดับ','เบอร์รถ','โมเดล','เลขเฟรม','ประเภท','ยี่ห้อ','เสา','ขนาดล้อหน้า-สี','ขนาดล้อหลัง-สี','ชื่อลูกค้า','ที่อยู่','วันที่เช่า','บันทึก'].concat(getPhotoFieldKeys(RENT_PHOTOS));
+  const workCols = ['วันที่','เลขเล่ม-เลขที่','เบอร์รถ','โมเดล','เลขเฟรม','ประเภทงาน','รายการอไหล่','จำนวน','เลขใบขอซื้อ','บันทึก'].concat(getPhotoFieldKeys(WORK_PHOTOS));
+  const purCols = ['วันที่','เลขใบขอซื้อ','เบอร์รถ','โมเดล','เลขเฟรม','รายการอะไหล่','จำนวนขอซื้อ','จำนวนที่รับ','สถานะ','บันทึก'].concat(getPhotoFieldKeys(PUR_PHOTOS));
+  const rentRows = await addPhotoLinksToRows('rent', DB.rent || [], RENT_PHOTOS);
+  const workRows = await addPhotoLinksToRows('work', DB.work || [], WORK_PHOTOS);
+  const purRows = await addPhotoLinksToRows('purchase', DB.purchase || [], PUR_PHOTOS);
+  if (!XLSX) {
+    downloadExcelXml([
+      buildExcelXmlSheet('รถเช่า', rentRows, rentCols),
+      buildExcelXmlSheet('ใบงาน', workRows, workCols),
+      buildExcelXmlSheet('ใบขอซื้อ', purRows, purCols)
+    ]);
+    showToast('ส่งออก Excel สำเร็จ', 'success');
+    return;
+  }
   const wb = XLSX.utils.book_new();
-  const rentCols = ['ลำดับ','เบอร์รถ','โมเดล','เลขเฟรม','ประเภท','ยี่ห้อ','เสา','ขนาดล้อหน้า-สี','ขนาดล้อหลัง-สี','ชื่อลูกค้า','ที่อยู่','วันที่เช่า','บันทึก'];
-  const workCols = ['วันที่','เลขเล่ม-เลขที่','เบอร์รถ','โมเดล','เลขเฟรม','ประเภทงาน','รายการอไหล่','จำนวน','เลขใบขอซื้อ','บันทึก'];
-  const purCols = ['วันที่','เลขใบขอซื้อ','เบอร์รถ','โมเดล','เลขเฟรม','รายการอะไหล่','จำนวนขอซื้อ','จำนวนที่รับ','สถานะ','บันทึก'];
   function toSheet(data, cols) {
     const rows = data.map(r => cols.map(c => r[c] || ''));
     return XLSX.utils.aoa_to_sheet([cols, ...rows]);
   }
-  XLSX.utils.book_append_sheet(wb, toSheet(DB.rent, rentCols), 'รถเช่า');
-  XLSX.utils.book_append_sheet(wb, toSheet(DB.work, workCols), 'ใบงาน');
-  XLSX.utils.book_append_sheet(wb, toSheet(DB.purchase, purCols), 'ใบขอซื้อ');
+  XLSX.utils.book_append_sheet(wb, toSheet(rentRows, rentCols), 'รถเช่า');
+  XLSX.utils.book_append_sheet(wb, toSheet(workRows, workCols), 'ใบงาน');
+  XLSX.utils.book_append_sheet(wb, toSheet(purRows, purCols), 'ใบขอซื้อ');
   XLSX.writeFile(wb, 'FL_WWC_' + new Date().toISOString().slice(0,10) + '.xlsx');
   showToast('ส่งออก Excel สำเร็จ', 'success');
+  } catch(err){ console.error(err); alert('Export Error: '+err.message); }
 }
-
 // =========================================================
 // IMPORT EXCEL
 // =========================================================
@@ -3364,11 +3468,16 @@ function requireAdmin(fn) {
 const GS_CLIENT_ID = '187679743912-k9deu52cddh58eb6jnkjm5m95q974dd1.apps.googleusercontent.com';
 const GS_SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 const GS_SHEET_IDS = {
-  rent:     '1E6dzMp1bPPD0_rt861XF_3EYs-pBHFsfijH30jqHAVc',
-  work:     '1tdJasH3JEyYDxLQzRfqO1E95QIrMNvKvLgMw4J-pj9Q',
-  purchase: '1b53EKGErHb5N8lTbSaymkiPal-cAZmg9F9pLIx1j8Ys'
+  rent:     '1S2qMtO7Fq2LqG93mEbtAFV1pnc8U0uShXh7DD-Kikr0',
+  work:     '1S2qMtO7Fq2LqG93mEbtAFV1pnc8U0uShXh7DD-Kikr0',
+  purchase: '1S2qMtO7Fq2LqG93mEbtAFV1pnc8U0uShXh7DD-Kikr0'
 };
-const GS_SHEET_RANGE = 'Sheet1';
+// ไฟล์ Google Sheet เดียว แต่คนละแท็บ (sheet tab) กันต่อหมวด
+const GS_SHEET_RANGES = {
+  rent:     'รถเช่า',
+  work:     'ใบงาน',
+  purchase: 'ใบขอซื้อ'
+};
 const GS_TOKEN_KEY = 'fl_gs_token';
 
 let gsAccessToken = null;
@@ -3546,22 +3655,24 @@ async function gsApiFetch(url, options) {
 
 async function gsReadSheet(tab) {
   const sheetId = GS_SHEET_IDS[tab];
+  const range = GS_SHEET_RANGES[tab];
   const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + sheetId +
-    '/values/' + encodeURIComponent(GS_SHEET_RANGE);
+    '/values/' + encodeURIComponent(range);
   const data = await gsApiFetch(url, { method: 'GET' });
   return gsRowsToObjects(data.values || []);
 }
 
 async function gsWriteSheet(tab, objects) {
   const sheetId = GS_SHEET_IDS[tab];
+  const range = GS_SHEET_RANGES[tab];
   const rows = gsObjectsToRows(objects);
   // เคลียร์ของเก่าก่อนเขียนใหม่ทั้งหมด (ง่ายและชัวร์สุดสำหรับ dataset ขนาดนี้)
   const clearUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + sheetId +
-    '/values/' + encodeURIComponent(GS_SHEET_RANGE) + ':clear';
+    '/values/' + encodeURIComponent(range) + ':clear';
   await gsApiFetch(clearUrl, { method: 'POST', body: JSON.stringify({}) });
 
   const updateUrl = 'https://sheets.googleapis.com/v4/spreadsheets/' + sheetId +
-    '/values/' + encodeURIComponent(GS_SHEET_RANGE) +
+    '/values/' + encodeURIComponent(range) +
     '?valueInputOption=RAW';
   await gsApiFetch(updateUrl, {
     method: 'PUT',
