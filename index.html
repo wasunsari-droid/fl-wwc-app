@@ -494,7 +494,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       <input type="file" accept=".zip" style="display:none" onchange="importZip(event)">
     </label>
     <span id="gs-sync-badge" style="font-size:12px;font-weight:600;white-space:nowrap;"></span>
-    <button id="btn-gs-login" title="คลิกเพื่อเชื่อมต่อ Google Sheets" style="background:none;border:1.5px solid var(--gray-300);border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;color:var(--gray-600);font-family:var(--font);transition:all 0.2s;white-space:nowrap;">🔗 เชื่อมต่อ Sheets</button>
+    <button id="btn-gs-login" onclick="gsButtonClick()" title="คลิกเพื่อเชื่อมต่อ Google Sheets" style="background:none;border:1.5px solid var(--gray-300);border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;color:var(--gray-600);font-family:var(--font);transition:all 0.2s;white-space:nowrap;">🔗 เชื่อมต่อ Sheets</button>
     <button id="btn-lock" onclick="toggleAdminMode()" title="โหมดแก้ไข (Admin)" style="background:none;border:1.5px solid var(--gray-300);border-radius:8px;padding:6px 14px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:6px;color:var(--gray-600);font-family:var(--font);transition:all 0.2s;white-space:nowrap;">🔒 <span id="lock-label">ล็อก</span></button>
   </div>
 </div>
@@ -3396,6 +3396,9 @@ function gsLoadScript() {
 async function gsInit() {
   try {
     await gsLoadScript();
+    if (!window.google || !window.google.accounts || !window.google.accounts.oauth2) {
+      throw new Error('Google Identity Services script โหลดไม่สำเร็จ (window.google ไม่มี)');
+    }
     gsTokenClient = google.accounts.oauth2.initTokenClient({
       client_id: GS_CLIENT_ID,
       scope: GS_SCOPES,
@@ -3407,9 +3410,17 @@ async function gsInit() {
           gsUpdateLoginUI();
           showToast('เชื่อมต่อ Google Sheets สำเร็จ', 'success');
           gsLoadAllFromSheets();
+        } else if (resp && resp.error) {
+          console.error('OAuth callback error:', resp);
+          showToast('เชื่อมต่อ Google ไม่สำเร็จ: ' + resp.error, 'error');
         }
+      },
+      error_callback: function(err) {
+        console.error('OAuth error_callback:', err);
+        showToast('เชื่อมต่อ Google ไม่สำเร็จ: ' + (err && err.type ? err.type : 'unknown error'), 'error');
       }
     });
+    console.log('gsInit: token client ready');
     // Restore token from this session if available
     const saved = sessionStorage.getItem(GS_TOKEN_KEY);
     if (saved) {
@@ -3418,14 +3429,42 @@ async function gsInit() {
       gsUpdateLoginUI();
     }
   } catch (e) {
-    console.error('gsInit failed', e);
+    console.error('gsInit failed:', e);
+    showToast('โหลดระบบ Google ไม่สำเร็จ — ' + (e.message || ''), 'error');
   }
 }
 
-function gsLogin() {
-  if (!gsTokenClient) { showToast('ระบบยังโหลดไม่เสร็จ ลองใหม่อีกครั้ง', 'error'); return; }
-  gsTokenClient.requestAccessToken();
+let gsInitPromise = null;
+
+// จุดเข้าเดียวที่ปุ่มเรียก — ไม่ว่า gsInit() จะโหลดเสร็จหรือยังก็ทำงานถูกต้อง
+async function gsButtonClick() {
+  if (gsLoggedIn) {
+    if (confirm('ออกจากระบบ Google Sheets?')) gsLogout();
+    return;
+  }
+  const btn = document.getElementById('btn-gs-login');
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ กำลังโหลด...'; }
+  try {
+    // รอให้ gsInit() (ที่ถูกเรียกตอนเปิดหน้าเว็บ) โหลดเสร็จก่อน ถ้ายังไม่เสร็จ
+    if (gsInitPromise) await gsInitPromise;
+    if (!gsTokenClient) {
+      // เผื่อกรณี gsInit ยังไม่เคยถูกเรียกเลย (fallback)
+      await gsInit();
+    }
+    if (!gsTokenClient) {
+      showToast('โหลดระบบ Google ไม่สำเร็จ ลองรีเฟรชหน้าเว็บแล้วลองใหม่', 'error');
+      gsUpdateLoginUI();
+      return;
+    }
+    gsTokenClient.requestAccessToken();
+  } catch (e) {
+    console.error('gsButtonClick error', e);
+    showToast('เชื่อมต่อ Google ไม่สำเร็จ — ' + (e.message || 'ลองอีกครั้ง'), 'error');
+    gsUpdateLoginUI();
+  }
 }
+
+function gsLogin() { gsButtonClick(); }
 
 function gsLogout() {
   gsAccessToken = null;
@@ -3438,17 +3477,15 @@ function gsLogout() {
 function gsUpdateLoginUI() {
   const btn = document.getElementById('btn-gs-login');
   if (!btn) return;
+  btn.disabled = false;
   if (gsLoggedIn) {
     btn.innerHTML = '🟢 Sheets เชื่อมต่อแล้ว';
     btn.title = 'คลิกเพื่อออกจากระบบ Google Sheets';
-    btn.onclick = function() {
-      if (confirm('ออกจากระบบ Google Sheets?')) gsLogout();
-    };
   } else {
     btn.innerHTML = '🔗 เชื่อมต่อ Sheets';
     btn.title = 'คลิกเพื่อเชื่อมต่อ Google Sheets';
-    btn.onclick = gsLogin;
   }
+  // onclick มาจาก HTML attribute (gsButtonClick) อยู่แล้ว ไม่ต้องตั้งซ้ำตรงนี้
 }
 
 // ---------------------------------------------------------
@@ -3599,7 +3636,7 @@ saveLS = function(tab) {
 };
 
 // เริ่มต้นระบบ Google Sheets
-gsInit();
+gsInitPromise = gsInit();
 
 </script>
 </body>
