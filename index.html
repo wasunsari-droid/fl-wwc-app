@@ -1128,8 +1128,8 @@ function compressImage(file) {
 // =========================================================
 function normalizeCloudUrl(url) {
   if (!url) return url;
+  url = stripCloudPrefix(url);
   // ตัด cloud: prefix ออกก่อนถ้ามี (กรณีผู้ใช้วาง cloud:https://...)
-  if (url.startsWith('cloud:')) url = url.slice(6);
   // Google Drive thumbnail URL (วางมาจากระบบโดยตรง) — ใช้ได้เลย
   if (url.includes('drive.google.com/thumbnail')) return url;
   // Google Drive: /file/d/FILE_ID/view → thumbnail
@@ -1141,6 +1141,12 @@ function normalizeCloudUrl(url) {
   // Dropbox: ?dl=0 → raw
   if (url.includes('dropbox.com')) return url.replace(/[?&]dl=0/, '').replace('www.dropbox.com','dl.dropboxusercontent.com');
   return url;
+}
+
+function stripCloudPrefix(value) {
+  if (typeof value !== 'string') return value;
+  while (value.startsWith('cloud:')) value = value.slice(6);
+  return value;
 }
 
 function buildPhotoGrid(containerId, photoFields) {
@@ -1186,7 +1192,7 @@ async function onFileChosen(event, key) {
       const fileName = key + '_' + Date.now() + '.jpg';
       const thumbUrl = await uploadToDrive(dataUrl, fileName);
       currentPhotos[key] = thumbUrl;
-      updatePickBtn(key, 'cloud:' + thumbUrl);
+      updatePickBtn(key, thumbUrl);
       if (li) li.value = thumbUrl;
       showToast('อัปโหลดรูปขึ้น Google Drive สำเร็จ ✅', 'success');
     } catch (e) {
@@ -1214,9 +1220,8 @@ function onLinkInput(key) {
     return;
   }
   const url = normalizeCloudUrl(raw);
-  // store as special cloud-link marker
   currentPhotos[key] = url;
-  updatePickBtn(key, 'cloud:' + url);
+  updatePickBtn(key, url);
 }
 
 function updatePickBtn(key, dataUrl) {
@@ -1225,8 +1230,8 @@ function updatePickBtn(key, dataUrl) {
   const li  = document.getElementById('link-' + key);
   if (!btn) return;
   if (dataUrl) {
-    const isCloud = typeof dataUrl === 'string' && dataUrl.startsWith('cloud:');
-    const src = isCloud ? dataUrl.slice(6) : dataUrl;
+    const src = stripCloudPrefix(dataUrl);
+    const isCloud = typeof src === 'string' && /^https?:\/\//.test(src);
     btn.innerHTML = `<img src="${src}" alt="" onerror="this.parentElement.innerHTML='<span style=\'font-size:11px;color:#ef4444\'>โหลดรูปไม่ได้<br>ตรวจสอบลิงก์</span>'"><div class="pick-overlay">🔄 เปลี่ยนรูป</div>`;
     btn.classList.add('has-img');
     if (del) del.style.display = 'block';
@@ -1252,14 +1257,16 @@ async function loadPhotosForEdit(tab, recordId, photoFields, record) {
     // อ่านจาก record field ก่อน (รูปที่ sync มาจาก Drive/Sheets)
     const fromRecord = record && record[p.key] ? record[p.key] : null;
     if (fromRecord) {
-      currentPhotos[p.key] = fromRecord;
-      updatePickBtn(p.key, fromRecord);
+      const cleanRecordPhoto = stripCloudPrefix(fromRecord);
+      currentPhotos[p.key] = cleanRecordPhoto;
+      updatePickBtn(p.key, cleanRecordPhoto);
     } else {
       // fallback: อ่านจาก IDB (รูปเก่าที่เก็บไว้ในเครื่อง)
       const k = genImgKey(tab, recordId, p.key);
       const data = await idbGet(k);
-      currentPhotos[p.key] = data || null;
-      updatePickBtn(p.key, data);
+      const cleanLocalPhoto = stripCloudPrefix(data);
+      currentPhotos[p.key] = cleanLocalPhoto || null;
+      updatePickBtn(p.key, cleanLocalPhoto);
     }
   }
 }
@@ -1281,7 +1288,10 @@ async function savePhotos(tab, recordId, photoFields, record) {
       await idbDel(k);
     } else if (typeof val === 'string' && val.startsWith('cloud:')) {
       // รูป Drive — เก็บ URL ลงใน record field
-      if (record) record[p.key] = (typeof val === 'string' && val.startsWith('cloud:')) ? val.slice(6) : val; // เก็บทั้ง prefix "cloud:" ไว้ ให้ consistent กับโค้ดเดิม
+      if (record) record[p.key] = stripCloudPrefix(val);
+    } else if (typeof val === 'string' && /^https?:\/\//.test(val)) {
+      // รูป Drive/Cloud link — เก็บเฉพาะ URL ลงใน record field
+      if (record) record[p.key] = stripCloudPrefix(val);
     } else {
       // base64 local (กรณี login ไม่สำเร็จ) — เก็บ IDB เหมือนเดิม
       const k = genImgKey(tab, recordId, p.key);
@@ -1421,8 +1431,7 @@ async function makeThumbHtml(tab, recordId, photoFields) {
       data = await idbGet(k);
     }
     if (data) {
-      const isCloud = typeof data === 'string' && data.startsWith('cloud:');
-      imgs.push({ label: p.label, src: isCloud ? data.slice(6) : data });
+      imgs.push({ label: p.label, src: stripCloudPrefix(data) });
     }
   }
 
