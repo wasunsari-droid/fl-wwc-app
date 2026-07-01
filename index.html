@@ -520,7 +520,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       <div class="search-box">
         
         <input type="text" placeholder="ค้นหา เบอร์รถ, โมเดล, ชื่อลูกค้า..." id="search-rent" oninput="renderRent()">
-        <button id="btn-group-rent" class="btn btn-outline" onclick="toggleGroupRent()" title="จัดกลุ่มตามชื่อลูกค้า" style="white-space:nowrap">👥 จัดกลุ่มลูกค้า</button>
+        <button id="btn-group-rent" class="btn btn-outline" onclick="toggleGroupRent()" title="จัดกลุ่มตามชื่อลูกค้า" style="white-space:nowrap;background:var(--primary);color:#fff">📋 ตารางปกติ</button>
       </div>
       <select id="filter-rent-type" onchange="renderRent()" style="height:38px;padding:0 12px;border:1px solid var(--gray-300);border-radius:8px;font-size:14px;font-family:var(--font)">
         <option value="">ทุกประเภท</option>
@@ -1426,7 +1426,7 @@ async function makeThumbHtml(tab, recordId, photoFields) {
 // =========================================================
 // RENDER RENT — GROUP BY CUSTOMER
 // =========================================================
-let rentGroupMode = false;
+let rentGroupMode = true;
 
 function toggleGroupRent() {
   rentGroupMode = !rentGroupMode;
