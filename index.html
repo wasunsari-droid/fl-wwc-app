@@ -447,14 +447,9 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     .parts-table th, .parts-table td { padding: 6px 4px; }
 
     /* Purchase table — compact on mobile */
-    .purchase-part-summary { gap: 1px; }
+    .purchase-part-summary { gap: 1px; max-height: 60px; overflow: hidden; }
     .purchase-part-name-list { min-width: 90px; max-width: 120px; }
     .purchase-part-line { font-size: 10px; }
-    /* ซ่อน column ที่ไม่จำเป็นบน mobile แสดงแค่ชื่อ+สถานะรวม */
-    .purchase-col-ordered,
-    .purchase-col-received,
-    .purchase-col-parts { display: none; }
-    .purchase-col-status-main { display: table-cell !important; }
   }
 </style>
 </head>
@@ -662,7 +657,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
           <thead><tr>
             <th style="width:44px">#</th>
             <th>วันที่</th><th>เลขใบขอซื้อ</th><th>เบอร์รถ</th><th>โมเดล</th><th>เลขเฟรม</th>
-            <th class="purchase-col-parts">รายการอะไหล่</th><th class="purchase-col-ordered" style="width:70px">จำนวนขอซื้อ</th><th class="purchase-col-received" style="width:70px">จำนวนที่รับ</th><th style="width:150px">สถานะ</th><th>รูปใบขอซื้อ</th>
+            <th>รายการอะไหล่</th><th style="width:70px">จำนวนขอซื้อ</th><th style="width:70px">จำนวนที่รับ</th><th style="width:150px">สถานะ</th><th>รูปใบขอซื้อ</th>
             <th style="width:110px">จัดการ</th>
           </tr></thead>
           <tbody id="tbody-purchase"></tbody>
@@ -2607,9 +2602,9 @@ async function renderPurchase() {
         <td>${r['เบอร์รถ']||'-'}</td>
         <td>${r['โมเดล']||'-'}</td>
         <td style="font-size:12px">${r['เลขเฟรม']||'-'}</td>
-        <td class="purchase-col-parts">${renderPurchasePartList(parsePurchaseParts(r), 'name')}</td>
-        <td class="purchase-col-ordered">${renderPurchasePartList(parsePurchaseParts(r), 'ordered', false)}</td>
-        <td class="purchase-col-received">${renderPurchasePartList(parsePurchaseParts(r), 'received', false)}</td>
+        <td>${renderPurchasePartList(parsePurchaseParts(r), 'name')}</td>
+        <td>${renderPurchasePartList(parsePurchaseParts(r), 'ordered', false)}</td>
+        <td>${renderPurchasePartList(parsePurchaseParts(r), 'received', false)}</td>
         <td>${renderPurchasePartList(parsePurchaseParts(r), 'status') || (r['สถานะ'] ? `<span class="badge ${statusBadge[r['สถานะ']]||'badge-gray'}">${r['สถานะ']}</span>` : '-')}</td>
         <td id="thumb-pur-${realIdx}"><span style="color:var(--gray-300)">⏳</span></td>
         <td>
