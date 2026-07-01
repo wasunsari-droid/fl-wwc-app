@@ -3409,9 +3409,8 @@ function setAdminMode(on) {
     document.getElementById('btn-lock').style.background = 'var(--primary)';
     document.getElementById('btn-lock').style.color = '#fff';
     document.getElementById('btn-lock').style.borderColor = 'var(--primary)';
-    // แสดงปุ่ม Sheets และ auto-connect ถ้ายังไม่ login
+    // แสดงปุ่ม Sheets — admin ต้องกดปุ่มเองถ้าต้องการ sync
     gsUpdateLoginUI();
-    if (!gsLoggedIn && typeof gsButtonClick === 'function') gsButtonClick();
   } else {
     document.body.classList.remove('admin-mode');
     document.getElementById('btn-lock').innerHTML = '🔒 <span id="lock-label">ล็อก</span>';
@@ -3581,11 +3580,8 @@ async function gsInit() {
       gsAccessToken = saved;
       gsLoggedIn = true;
       gsUpdateLoginUI();
-    } else {
-      // ลองขอ token แบบ silent (ไม่แสดง popup) — จะสำเร็จถ้าเคย authorize ไว้แล้ว
-      gsUserTriggered = false;
-      gsTokenClient.requestAccessToken({ prompt: '' });
     }
+    // ไม่ขอ token อัตโนมัติ — รอให้ admin กดปุ่มเองเท่านั้น
   } catch (e) {
     console.error('gsInit failed:', e);
     showToast('โหลดระบบ Google ไม่สำเร็จ — ' + (e.message || ''), 'error');
