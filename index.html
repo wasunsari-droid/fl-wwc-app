@@ -1163,14 +1163,34 @@ async function onFileChosen(event, key) {
   if (!file) return;
   showToast('กำลัง compress รูป...', '');
   const dataUrl = await compressImage(file);
-  currentPhotos[key] = dataUrl;
-  updatePickBtn(key, dataUrl);
-  // clear link input when file chosen
+  event.target.value = '';
   const li = document.getElementById('link-' + key);
   if (li) li.value = '';
-  const kb = Math.round(dataUrl.length * 0.75 / 1024);
-  showToast(`บันทึกรูปสำเร็จ (~${kb} KB)`, 'success');
-  event.target.value = '';
+
+  if (gsLoggedIn) {
+    // อัปโหลดขึ้น Google Drive แล้วเก็บ thumbnail URL
+    showToast('กำลังอัปโหลดรูปขึ้น Google Drive...', '');
+    try {
+      const fileName = key + '_' + Date.now() + '.jpg';
+      const thumbUrl = await uploadToDrive(dataUrl, fileName);
+      currentPhotos[key] = 'cloud:' + thumbUrl;
+      updatePickBtn(key, 'cloud:' + thumbUrl);
+      if (li) li.value = thumbUrl;
+      showToast('อัปโหลดรูปขึ้น Google Drive สำเร็จ ✅', 'success');
+    } catch (e) {
+      console.error('uploadToDrive error:', e);
+      // fallback — เก็บ local ไปก่อน
+      currentPhotos[key] = dataUrl;
+      updatePickBtn(key, dataUrl);
+      showToast('อัปโหลดรูปไม่สำเร็จ เก็บไว้ในเครื่องชั่วคราว (' + (e.message||'') + ')', 'error');
+    }
+  } else {
+    // ยังไม่ login — เก็บ local ไปก่อนเหมือนเดิม
+    currentPhotos[key] = dataUrl;
+    updatePickBtn(key, dataUrl);
+    const kb = Math.round(dataUrl.length * 0.75 / 1024);
+    showToast('บันทึกรูปในเครื่องชั่วคราว (~' + kb + ' KB) — Login Google เพื่อ sync รูปข้ามเครื่อง', 'success');
+  }
 }
 
 function onLinkInput(key) {
@@ -1214,13 +1234,21 @@ function deletePhoto(key) {
   showToast('ลบรูปแล้ว (กด บันทึก เพื่อยืนยัน)', 'success');
 }
 
-async function loadPhotosForEdit(tab, recordId, photoFields) {
+async function loadPhotosForEdit(tab, recordId, photoFields, record) {
   currentPhotos = {};
   for (const p of photoFields) {
-    const k = genImgKey(tab, recordId, p.key);
-    const data = await idbGet(k);
-    currentPhotos[p.key] = data || null;
-    updatePickBtn(p.key, data);
+    // อ่านจาก record field ก่อน (รูปที่ sync มาจาก Drive/Sheets)
+    const fromRecord = record && record[p.key] ? record[p.key] : null;
+    if (fromRecord) {
+      currentPhotos[p.key] = fromRecord;
+      updatePickBtn(p.key, fromRecord);
+    } else {
+      // fallback: อ่านจาก IDB (รูปเก่าที่เก็บไว้ในเครื่อง)
+      const k = genImgKey(tab, recordId, p.key);
+      const data = await idbGet(k);
+      currentPhotos[p.key] = data || null;
+      updatePickBtn(p.key, data);
+    }
   }
 }
 
@@ -1229,14 +1257,22 @@ function clearPhotoGrid(photoFields) {
   photoFields.forEach(p => updatePickBtn(p.key, null));
 }
 
-async function savePhotos(tab, recordId, photoFields) {
+async function savePhotos(tab, recordId, photoFields, record) {
   for (const p of photoFields) {
-    const k = genImgKey(tab, recordId, p.key);
-    if (currentPhotos[p.key]) {
-      await idbSet(k, currentPhotos[p.key]);
-    } else if (currentPhotos[p.key] === null) {
-      // ถูกตั้งค่าเป็น null = ผู้ใช้กดลบ → ลบออกจาก IDB
+    const val = currentPhotos[p.key];
+    if (val === undefined) continue; // ไม่ได้แตะ field นี้เลย — ไม่ต้องแก้
+    if (val === null) {
+      // ผู้ใช้กดลบ → ล้าง field ใน record และลบจาก IDB
+      if (record) record[p.key] = '';
+      const k = genImgKey(tab, recordId, p.key);
       await idbDel(k);
+    } else if (typeof val === 'string' && val.startsWith('cloud:')) {
+      // รูป Drive — เก็บ URL ลงใน record field
+      if (record) record[p.key] = val; // เก็บทั้ง prefix "cloud:" ไว้ ให้ consistent กับโค้ดเดิม
+    } else {
+      // base64 local (กรณี login ไม่สำเร็จ) — เก็บ IDB เหมือนเดิม
+      const k = genImgKey(tab, recordId, p.key);
+      await idbSet(k, val);
     }
   }
 }
@@ -1933,7 +1969,7 @@ async function editRent(idx) {
   });
   buildPhotoGrid('photo-grid-rent', RENT_PHOTOS);
   const rid = r._id || idx;
-  await loadPhotosForEdit('rent', rid, RENT_PHOTOS);
+  await loadPhotosForEdit('rent', rid, RENT_PHOTOS, r);
   document.getElementById('modal-rent').classList.add('open');
 }
 
@@ -1946,14 +1982,14 @@ async function saveRent() {
   if (editIdx.rent >= 0) {
     const rid = DB.rent[editIdx.rent]._id || editIdx.rent;
     DB.rent[editIdx.rent] = {...DB.rent[editIdx.rent], ...obj};
-    await savePhotos('rent', rid, RENT_PHOTOS);
+    await savePhotos('rent', rid, RENT_PHOTOS, DB.rent[editIdx.rent]);
     showToast('แก้ไขข้อมูลสำเร็จ', 'success');
   } else {
     const rid = 'r' + Date.now();
     obj._id = rid;
     obj['ลำดับ'] = DB.rent.length + 1;
     DB.rent.push(obj);
-    await savePhotos('rent', rid, RENT_PHOTOS);
+    await savePhotos('rent', rid, RENT_PHOTOS, DB.rent[DB.rent.length - 1]);
     showToast('เพิ่มข้อมูลสำเร็จ', 'success');
   }
   saveLS('rent'); closeModal('rent'); renderRent();
@@ -2065,7 +2101,7 @@ async function editWork(idx) {
   document.getElementById('w-เลขเฟรม').value = r['เลขเฟรม']||'';
   workLoadParts(parseWorkParts(r));
   buildPhotoGrid('photo-grid-work', WORK_PHOTOS);
-  await loadPhotosForEdit('work', r._id || idx, WORK_PHOTOS);
+  await loadPhotosForEdit('work', r._id || idx, WORK_PHOTOS, r);
   document.getElementById('modal-work').classList.add('open');
 }
 
@@ -2158,12 +2194,12 @@ async function saveWork() {
   if (editIdx.work >= 0) {
     const rid = DB.work[editIdx.work]._id || editIdx.work;
     DB.work[editIdx.work] = {...DB.work[editIdx.work], ...obj};
-    await savePhotos('work', rid, WORK_PHOTOS);
+    await savePhotos('work', rid, WORK_PHOTOS, DB.work[editIdx.work]);
     showToast('แก้ไขข้อมูลสำเร็จ', 'success');
   } else {
     const rid = 'w' + Date.now();
     obj._id = rid; DB.work.push(obj);
-    await savePhotos('work', rid, WORK_PHOTOS);
+    await savePhotos('work', rid, WORK_PHOTOS, DB.work[DB.work.length - 1]);
     showToast('เพิ่มข้อมูลสำเร็จ', 'success');
   }
   saveLS('work'); closeModal('work'); renderWork();
@@ -2549,7 +2585,7 @@ async function editPurchase(idx) {
   document.getElementById('p-เลขเฟรม').value = r['เลขเฟรม']||'';
   purchaseLoadParts(r);
   buildPhotoGrid('photo-grid-purchase', PUR_PHOTOS);
-  await loadPhotosForEdit('purchase', r._id || idx, PUR_PHOTOS);
+  await loadPhotosForEdit('purchase', r._id || idx, PUR_PHOTOS, r);
   document.getElementById('modal-purchase').classList.add('open');
 }
 
@@ -2570,12 +2606,12 @@ async function savePurchase() {
   if (editIdx.purchase >= 0) {
     const rid = DB.purchase[editIdx.purchase]._id || editIdx.purchase;
     DB.purchase[editIdx.purchase] = {...DB.purchase[editIdx.purchase], ...obj};
-    await savePhotos('purchase', rid, PUR_PHOTOS);
+    await savePhotos('purchase', rid, PUR_PHOTOS, DB.purchase[editIdx.purchase]);
     showToast('แก้ไขข้อมูลสำเร็จ', 'success');
   } else {
     const rid = 'p' + Date.now();
     obj._id = rid; DB.purchase.push(obj);
-    await savePhotos('purchase', rid, PUR_PHOTOS);
+    await savePhotos('purchase', rid, PUR_PHOTOS, DB.purchase[DB.purchase.length - 1]);
     showToast('เพิ่มข้อมูลสำเร็จ', 'success');
   }
   saveLS('purchase'); closeModal('purchase'); renderPurchase();
@@ -3466,7 +3502,7 @@ function requireAdmin(fn) {
 // GOOGLE SHEETS SYNC — Sheets เป็น database หลัก
 // =========================================================
 const GS_CLIENT_ID = '187679743912-k9deu52cddh58eb6jnkjm5m95q974dd1.apps.googleusercontent.com';
-const GS_SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+const GS_SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 const GS_SHEET_IDS = {
   rent:     '1S2qMtO7Fq2LqG93mEbtAFV1pnc8U0uShXh7DD-Kikr0',
   work:     '1S2qMtO7Fq2LqG93mEbtAFV1pnc8U0uShXh7DD-Kikr0',
@@ -3651,6 +3687,74 @@ async function gsApiFetch(url, options) {
     throw new Error('Sheets API error: ' + res.status + ' ' + errText);
   }
   return res.json();
+}
+
+// ---------------------------------------------------------
+// Google Drive — อัปโหลดรูปและคืน URL thumbnail ที่ดูได้ทุกเครื่อง
+// ---------------------------------------------------------
+const GD_FOLDER_NAME = 'FL_WWC_Photos';
+let gdFolderId = null;
+
+async function gdGetOrCreateFolder() {
+  if (gdFolderId) return gdFolderId;
+  // ค้นหา folder ชื่อ FL_WWC_Photos ใน Drive ของผู้ใช้
+  const q = encodeURIComponent("mimeType='application/vnd.google-apps.folder' and name='" + GD_FOLDER_NAME + "' and trashed=false");
+  const searchRes = await fetch('https://www.googleapis.com/drive/v3/files?q=' + q + '&fields=files(id,name)', {
+    headers: { 'Authorization': 'Bearer ' + gsAccessToken }
+  });
+  const searchData = await searchRes.json();
+  if (searchData.files && searchData.files.length > 0) {
+    gdFolderId = searchData.files[0].id;
+    return gdFolderId;
+  }
+  // สร้าง folder ใหม่
+  const createRes = await fetch('https://www.googleapis.com/drive/v3/files', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + gsAccessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: GD_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
+  });
+  const folder = await createRes.json();
+  gdFolderId = folder.id;
+  // ตั้งให้ทุกคนที่มีลิงก์สามารถดูรูปได้ (reader)
+  await fetch('https://www.googleapis.com/drive/v3/files/' + gdFolderId + '/permissions', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + gsAccessToken, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ role: 'reader', type: 'anyone' })
+  });
+  return gdFolderId;
+}
+
+async function uploadToDrive(dataUrl, fileName) {
+  if (!gsAccessToken) throw new Error('ยังไม่ได้ login Google');
+  const folderId = await gdGetOrCreateFolder();
+  // แปลง dataUrl → Blob
+  const res = await fetch(dataUrl);
+  const blob = await res.blob();
+  const mimeType = blob.type || 'image/jpeg';
+  // Multipart upload
+  const boundary = '-------314159265358979323846';
+  const delimiter = '\r\n--' + boundary + '\r\n';
+  const closeDelimiter = '\r\n--' + boundary + '--';
+  const metadata = JSON.stringify({ name: fileName, parents: [folderId] });
+  const b64 = dataUrl.split(',')[1];
+  const body = delimiter +
+    'Content-Type: application/json\r\n\r\n' + metadata +
+    delimiter +
+    'Content-Type: ' + mimeType + '\r\n' +
+    'Content-Transfer-Encoding: base64\r\n\r\n' + b64 +
+    closeDelimiter;
+  const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
+    method: 'POST',
+    headers: {
+      'Authorization': 'Bearer ' + gsAccessToken,
+      'Content-Type': 'multipart/related; boundary="' + boundary + '"'
+    },
+    body: body
+  });
+  const file = await uploadRes.json();
+  if (!file.id) throw new Error('อัปโหลดรูปไม่สำเร็จ: ' + JSON.stringify(file));
+  // คืน thumbnail URL ที่ดูได้ทุกเครื่อง
+  return 'https://drive.google.com/thumbnail?id=' + file.id + '&sz=w1280';
 }
 
 async function gsReadSheet(tab) {
