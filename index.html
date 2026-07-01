@@ -1258,6 +1258,7 @@ function clearPhotoGrid(photoFields) {
 }
 
 async function savePhotos(tab, recordId, photoFields, record) {
+  invalidateThumbCache(tab, recordId); // ล้าง cache เมื่อมีการบันทึกรูปใหม่
   for (const p of photoFields) {
     const val = currentPhotos[p.key];
     if (val === undefined) continue; // ไม่ได้แตะ field นี้เลย — ไม่ต้องแก้
@@ -1352,7 +1353,25 @@ function observeThumb(el, tab, rid, photoFields) {
 // =========================================================
 // RENDER HELPERS
 // =========================================================
+const _thumbCache = {}; // key: "tab:recordId:fieldKeys" → html string
+
+function _thumbCacheKey(tab, recordId, photoFields) {
+  return tab + ':' + recordId + ':' + photoFields.map(function(p) { return p.key; }).join(',');
+}
+
+function invalidateThumbCache(tab, recordId) {
+  // ล้าง cache ของ record นั้น หรือทั้ง tab ถ้าไม่ระบุ record
+  Object.keys(_thumbCache).forEach(function(k) {
+    if (recordId ? k.startsWith(tab + ':' + recordId + ':') : k.startsWith(tab + ':')) {
+      delete _thumbCache[k];
+    }
+  });
+}
+
 async function makeThumbHtml(tab, recordId, photoFields) {
+  const cacheKey = _thumbCacheKey(tab, recordId, photoFields);
+  if (_thumbCache[cacheKey]) return _thumbCache[cacheKey];
+
   // หา record จริงเพื่ออ่าน cloud: URL — ค้นจาก _id ก่อน แล้ว fallback index
   let record = null;
   if (DB[tab]) {
@@ -1362,11 +1381,9 @@ async function makeThumbHtml(tab, recordId, photoFields) {
   const imgs = [];
   for (const p of photoFields) {
     let data = null;
-    // อ่านจาก record field ก่อน (รูปที่ sync มาจาก Drive/Sheets)
     if (record && record[p.key]) {
       data = record[p.key];
     } else {
-      // fallback: อ่านจาก IDB (รูปเก่าที่เก็บในเครื่อง)
       const k = genImgKey(tab, recordId, p.key);
       data = await idbGet(k);
     }
@@ -1375,13 +1392,19 @@ async function makeThumbHtml(tab, recordId, photoFields) {
       imgs.push({label: p.label, data, src: isCloud ? data.slice(6) : data});
     }
   }
-  if (!imgs.length) return '<span style="color:var(--gray-300);font-size:18px">📷</span>';
-  const srcs = imgs.map(im => im.src);
-  const uid = 'lbs' + (++window._lbUid);
-  window[uid] = srcs;
-  return '<div class="img-thumbs">' + imgs.map((im, idx) =>
-    `<img class="img-thumb" src="${im.src}" title="${im.label}" onclick="openLightbox(window['${uid}'][${idx}],window['${uid}'])" alt="${im.label}" onerror="this.style.opacity='0.3'">`
-  ).join('') + '</div>';
+  const html = imgs.length === 0
+    ? '<span style="color:var(--gray-300);font-size:18px">📷</span>'
+    : (function() {
+        const srcs = imgs.map(function(im) { return im.src; });
+        const uid = 'lbs' + (++window._lbUid);
+        window[uid] = srcs;
+        return '<div class="img-thumbs">' + imgs.map(function(im, idx) {
+          return '<img class="img-thumb" src="' + im.src + '" title="' + im.label + '" onclick="openLightbox(window[\'' + uid + '\'][' + idx + '],window[\'' + uid + '\'])" alt="' + im.label + '" onerror="this.style.opacity=\'0.3\'">';
+        }).join('') + '</div>';
+      })();
+
+  _thumbCache[cacheKey] = html;
+  return html;
 }
 
 // =========================================================
@@ -3850,6 +3873,7 @@ async function gsLoadAllFromSheets() {
       if (rows.length > 0) {
         DB[tab] = rows;
         saveLS(tab);
+        invalidateThumbCache(tab); // ล้าง cache ทั้ง tab เพราะข้อมูลใหม่มาแล้ว
       }
     }
     if (typeof renderRent === 'function') renderRent();
