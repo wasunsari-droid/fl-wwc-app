@@ -1128,10 +1128,17 @@ function compressImage(file) {
 // =========================================================
 function normalizeCloudUrl(url) {
   if (!url) return url;
-  // Google Drive: /file/d/FILE_ID/view  →  direct img
+  // ตัด cloud: prefix ออกก่อนถ้ามี (กรณีผู้ใช้วาง cloud:https://...)
+  if (url.startsWith('cloud:')) url = url.slice(6);
+  // Google Drive thumbnail URL (วางมาจากระบบโดยตรง) — ใช้ได้เลย
+  if (url.includes('drive.google.com/thumbnail')) return url;
+  // Google Drive: /file/d/FILE_ID/view → thumbnail
   const gdrive = url.match(/drive\.google\.com\/file\/d\/([^/\?]+)/);
   if (gdrive) return 'https://drive.google.com/thumbnail?id=' + gdrive[1] + '&sz=w1280';
-  // Dropbox: ?dl=0  →  ?raw=1
+  // Google Drive: open?id=FILE_ID
+  const gopen = url.match(/drive\.google\.com\/open\?id=([^&]+)/);
+  if (gopen) return 'https://drive.google.com/thumbnail?id=' + gopen[1] + '&sz=w1280';
+  // Dropbox: ?dl=0 → raw
   if (url.includes('dropbox.com')) return url.replace(/[?&]dl=0/, '').replace('www.dropbox.com','dl.dropboxusercontent.com');
   return url;
 }
