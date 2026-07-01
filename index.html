@@ -494,7 +494,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       <input type="file" accept=".zip" style="display:none" onchange="importZip(event)">
     </label>
     <span id="gs-sync-badge" style="font-size:12px;font-weight:600;white-space:nowrap;"></span>
-    <button id="btn-gs-login" onclick="gsButtonClick()" title="คลิกเพื่อเชื่อมต่อ Google Sheets" style="background:none;border:1.5px solid var(--gray-300);border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;color:var(--gray-600);font-family:var(--font);transition:all 0.2s;white-space:nowrap;">🔗 เชื่อมต่อ Sheets</button>
+    <button id="btn-gs-login" onclick="gsButtonClick()" title="คลิกเพื่อเชื่อมต่อ Google Sheets" style="background:none;border:1.5px solid var(--gray-300);border-radius:8px;padding:6px 14px;font-size:13px;cursor:pointer;display:none;align-items:center;gap:6px;color:var(--gray-600);font-family:var(--font);transition:all 0.2s;white-space:nowrap;">🔗 เชื่อมต่อ Sheets</button>
     <button id="btn-lock" onclick="toggleAdminMode()" title="โหมดแก้ไข (Admin)" style="background:none;border:1.5px solid var(--gray-300);border-radius:8px;padding:6px 14px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:6px;color:var(--gray-600);font-family:var(--font);transition:all 0.2s;white-space:nowrap;">🔒 <span id="lock-label">ล็อก</span></button>
   </div>
 </div>
@@ -3409,12 +3409,17 @@ function setAdminMode(on) {
     document.getElementById('btn-lock').style.background = 'var(--primary)';
     document.getElementById('btn-lock').style.color = '#fff';
     document.getElementById('btn-lock').style.borderColor = 'var(--primary)';
+    // แสดงปุ่ม Sheets และ auto-connect ถ้ายังไม่ login
+    gsUpdateLoginUI();
+    if (!gsLoggedIn && typeof gsButtonClick === 'function') gsButtonClick();
   } else {
     document.body.classList.remove('admin-mode');
     document.getElementById('btn-lock').innerHTML = '🔒 <span id="lock-label">ล็อก</span>';
     document.getElementById('btn-lock').style.background = '';
     document.getElementById('btn-lock').style.color = '';
     document.getElementById('btn-lock').style.borderColor = '';
+    // ซ่อนปุ่ม Sheets
+    gsUpdateLoginUI();
   }
 }
 
@@ -3538,6 +3543,8 @@ function gsLoadScript() {
   });
 }
 
+let gsUserTriggered = false;
+
 async function gsInit() {
   try {
     await gsLoadScript();
@@ -3557,12 +3564,14 @@ async function gsInit() {
           gsLoadAllFromSheets();
         } else if (resp && resp.error) {
           console.error('OAuth callback error:', resp);
-          showToast('เชื่อมต่อ Google ไม่สำเร็จ: ' + resp.error, 'error');
+          if (gsUserTriggered) showToast('เชื่อมต่อ Google ไม่สำเร็จ: ' + resp.error, 'error');
         }
       },
       error_callback: function(err) {
+        if (!gsUserTriggered) return; // silent request ล้มเหลว — ปกติ ไม่ต้องแจ้ง
         console.error('OAuth error_callback:', err);
         showToast('เชื่อมต่อ Google ไม่สำเร็จ: ' + (err && err.type ? err.type : 'unknown error'), 'error');
+        gsUpdateLoginUI();
       }
     });
     console.log('gsInit: token client ready');
@@ -3572,6 +3581,10 @@ async function gsInit() {
       gsAccessToken = saved;
       gsLoggedIn = true;
       gsUpdateLoginUI();
+    } else {
+      // ลองขอ token แบบ silent (ไม่แสดง popup) — จะสำเร็จถ้าเคย authorize ไว้แล้ว
+      gsUserTriggered = false;
+      gsTokenClient.requestAccessToken({ prompt: '' });
     }
   } catch (e) {
     console.error('gsInit failed:', e);
@@ -3601,6 +3614,7 @@ async function gsButtonClick() {
       gsUpdateLoginUI();
       return;
     }
+    gsUserTriggered = true;
     gsTokenClient.requestAccessToken();
   } catch (e) {
     console.error('gsButtonClick error', e);
@@ -3623,6 +3637,9 @@ function gsUpdateLoginUI() {
   const btn = document.getElementById('btn-gs-login');
   if (!btn) return;
   btn.disabled = false;
+  // แสดงปุ่มเฉพาะตอน admin mode เท่านั้น
+  const isAdmin = document.body.classList.contains('admin-mode');
+  btn.style.display = isAdmin ? '' : 'none';
   if (gsLoggedIn) {
     btn.innerHTML = '🟢 Sheets เชื่อมต่อแล้ว';
     btn.title = 'คลิกเพื่อออกจากระบบ Google Sheets';
@@ -3630,7 +3647,6 @@ function gsUpdateLoginUI() {
     btn.innerHTML = '🔗 เชื่อมต่อ Sheets';
     btn.title = 'คลิกเพื่อเชื่อมต่อ Google Sheets';
   }
-  // onclick มาจาก HTML attribute (gsButtonClick) อยู่แล้ว ไม่ต้องตั้งซ้ำตรงนี้
 }
 
 // ---------------------------------------------------------
@@ -3757,13 +3773,27 @@ async function uploadToDrive(dataUrl, fileName) {
   return 'https://drive.google.com/thumbnail?id=' + file.id + '&sz=w1280';
 }
 
+// API Key สำหรับ public read (ไม่ต้อง login)
+const GS_API_KEY = 'AIzaSyAhN6jo1vRLb3iI3LrFu5n8wuYIxF3FA40';
+
 async function gsReadSheet(tab) {
   const sheetId = GS_SHEET_IDS[tab];
   const range = GS_SHEET_RANGES[tab];
-  const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + sheetId +
-    '/values/' + encodeURIComponent(range);
-  const data = await gsApiFetch(url, { method: 'GET' });
-  return gsRowsToObjects(data.values || []);
+  // ถ้า login แล้ว ใช้ OAuth token (อ่าน+เขียนได้)
+  // ถ้ายังไม่ login ใช้ API Key อ่านอย่างเดียว (public read)
+  if (gsLoggedIn && gsAccessToken) {
+    const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + sheetId +
+      '/values/' + encodeURIComponent(range);
+    const data = await gsApiFetch(url, { method: 'GET' });
+    return gsRowsToObjects(data.values || []);
+  } else {
+    const url = 'https://sheets.googleapis.com/v4/spreadsheets/' + sheetId +
+      '/values/' + encodeURIComponent(range) + '?key=' + GS_API_KEY;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('Sheets API error: ' + res.status);
+    const data = await res.json();
+    return gsRowsToObjects(data.values || []);
+  }
 }
 
 async function gsWriteSheet(tab, objects) {
@@ -3805,23 +3835,21 @@ async function gsSyncToSheets(tab) {
 }
 
 async function gsLoadAllFromSheets() {
-  if (!gsLoggedIn) return;
-  showToast('กำลังโหลดข้อมูลจาก Google Sheets...', '');
   try {
     for (const tab of ['rent', 'work', 'purchase']) {
       const rows = await gsReadSheet(tab);
       if (rows.length > 0) {
         DB[tab] = rows;
-        saveLS(tab); // เก็บ cache ไว้ใน localStorage ด้วย
+        saveLS(tab);
       }
     }
-    showToast('โหลดข้อมูลจาก Google Sheets สำเร็จ', 'success');
     if (typeof renderRent === 'function') renderRent();
     if (typeof renderWork === 'function') renderWork();
     if (typeof renderPurchase === 'function') renderPurchase();
+    if (gsLoggedIn) showToast('โหลดข้อมูลจาก Google Sheets สำเร็จ', 'success');
   } catch (e) {
     console.error('gsLoadAllFromSheets error', e);
-    showToast('โหลดข้อมูลจาก Sheets ไม่สำเร็จ — ' + (e.message || ''), 'error');
+    showToast('โหลดข้อมูลไม่สำเร็จ — ' + (e.message || ''), 'error');
   }
 }
 
@@ -3852,6 +3880,9 @@ saveLS = function(tab) {
 
 // เริ่มต้นระบบ Google Sheets
 gsInitPromise = gsInit();
+
+// โหลดข้อมูลจาก Sheets ทันทีที่เปิดหน้าเว็บ (ใช้ API Key — ไม่ต้อง login)
+gsLoadAllFromSheets();
 
 </script>
 </body>
