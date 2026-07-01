@@ -1353,10 +1353,23 @@ function observeThumb(el, tab, rid, photoFields) {
 // RENDER HELPERS
 // =========================================================
 async function makeThumbHtml(tab, recordId, photoFields) {
+  // หา record จริงเพื่ออ่าน cloud: URL — ค้นจาก _id ก่อน แล้ว fallback index
+  let record = null;
+  if (DB[tab]) {
+    record = DB[tab].find(function(r) { return r._id === recordId; });
+    if (!record && !isNaN(recordId)) record = DB[tab][Number(recordId)];
+  }
   const imgs = [];
   for (const p of photoFields) {
-    const k = genImgKey(tab, recordId, p.key);
-    const data = await idbGet(k);
+    let data = null;
+    // อ่านจาก record field ก่อน (รูปที่ sync มาจาก Drive/Sheets)
+    if (record && record[p.key]) {
+      data = record[p.key];
+    } else {
+      // fallback: อ่านจาก IDB (รูปเก่าที่เก็บในเครื่อง)
+      const k = genImgKey(tab, recordId, p.key);
+      data = await idbGet(k);
+    }
     if (data) {
       const isCloud = typeof data === 'string' && data.startsWith('cloud:');
       imgs.push({label: p.label, data, src: isCloud ? data.slice(6) : data});
