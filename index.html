@@ -1185,7 +1185,7 @@ async function onFileChosen(event, key) {
     try {
       const fileName = key + '_' + Date.now() + '.jpg';
       const thumbUrl = await uploadToDrive(dataUrl, fileName);
-      currentPhotos[key] = 'cloud:' + thumbUrl;
+      currentPhotos[key] = thumbUrl;
       updatePickBtn(key, 'cloud:' + thumbUrl);
       if (li) li.value = thumbUrl;
       showToast('อัปโหลดรูปขึ้น Google Drive สำเร็จ ✅', 'success');
@@ -1215,7 +1215,7 @@ function onLinkInput(key) {
   }
   const url = normalizeCloudUrl(raw);
   // store as special cloud-link marker
-  currentPhotos[key] = 'cloud:' + url;
+  currentPhotos[key] = url;
   updatePickBtn(key, 'cloud:' + url);
 }
 
@@ -1281,7 +1281,7 @@ async function savePhotos(tab, recordId, photoFields, record) {
       await idbDel(k);
     } else if (typeof val === 'string' && val.startsWith('cloud:')) {
       // รูป Drive — เก็บ URL ลงใน record field
-      if (record) record[p.key] = val; // เก็บทั้ง prefix "cloud:" ไว้ ให้ consistent กับโค้ดเดิม
+      if (record) record[p.key] = (typeof val === 'string' && val.startsWith('cloud:')) ? val.slice(6) : val; // เก็บทั้ง prefix "cloud:" ไว้ ให้ consistent กับโค้ดเดิม
     } else {
       // base64 local (กรณี login ไม่สำเร็จ) — เก็บ IDB เหมือนเดิม
       const k = genImgKey(tab, recordId, p.key);
