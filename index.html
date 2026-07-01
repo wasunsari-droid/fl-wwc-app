@@ -1354,35 +1354,46 @@ function observeThumb(el, tab, rid, photoFields) {
 // RENDER HELPERS
 // =========================================================
 const THUMB_CACHE_KEY = 'fl_thumb_cache';
-
-function _getThumbStore() {
-  try { return JSON.parse(sessionStorage.getItem(THUMB_CACHE_KEY) || '{}'); } catch(e) { return {}; }
-}
-function _saveThumbStore(store) {
-  try { sessionStorage.setItem(THUMB_CACHE_KEY, JSON.stringify(store)); } catch(e) {}
-}
+const _thumbMem = new Map(); // memory cache — เร็วสุด ใช้ตลอด session
 
 function _thumbCacheKey(tab, recordId, photoFields) {
   return tab + ':' + recordId + ':' + photoFields.map(function(p) { return p.key; }).join(',');
 }
 
+// โหลด sessionStorage ครั้งเดียวตอนเริ่ม
+(function() {
+  try {
+    const stored = JSON.parse(sessionStorage.getItem(THUMB_CACHE_KEY) || '{}');
+    Object.keys(stored).forEach(function(k) { _thumbMem.set(k, stored[k]); });
+  } catch(e) {}
+})();
+
+let _thumbSaveTimer = null;
+function _scheduleThumbSave() {
+  // debounce: เขียน sessionStorage แค่ครั้งเดียวหลังหยุด 1 วินาที ไม่ block scroll
+  if (_thumbSaveTimer) clearTimeout(_thumbSaveTimer);
+  _thumbSaveTimer = setTimeout(function() {
+    try {
+      const obj = {};
+      _thumbMem.forEach(function(v, k) { obj[k] = v; });
+      sessionStorage.setItem(THUMB_CACHE_KEY, JSON.stringify(obj));
+    } catch(e) {}
+  }, 1000);
+}
+
 function invalidateThumbCache(tab, recordId) {
-  const store = _getThumbStore();
-  Object.keys(store).forEach(function(k) {
+  _thumbMem.forEach(function(_, k) {
     if (recordId ? k.startsWith(tab + ':' + recordId + ':') : k.startsWith(tab + ':')) {
-      delete store[k];
+      _thumbMem.delete(k);
     }
   });
-  _saveThumbStore(store);
+  _scheduleThumbSave();
 }
 
 async function makeThumbHtml(tab, recordId, photoFields) {
   const cacheKey = _thumbCacheKey(tab, recordId, photoFields);
-  const store = _getThumbStore();
-  // cache hit: คืน HTML จาก sessionStorage
-  if (store[cacheKey]) return store[cacheKey];
+  if (_thumbMem.has(cacheKey)) return _thumbMem.get(cacheKey); // memory hit — instant
 
-  // หา record จริงเพื่ออ่าน cloud: URL
   let record = null;
   if (DB[tab]) {
     record = DB[tab].find(function(r) { return r._id === recordId; });
@@ -1417,9 +1428,8 @@ async function makeThumbHtml(tab, recordId, photoFields) {
     }).join('') + '</div>';
   }
 
-  // บันทึกลง sessionStorage
-  store[cacheKey] = html;
-  _saveThumbStore(store);
+  _thumbMem.set(cacheKey, html);
+  _scheduleThumbSave(); // เขียน sessionStorage แบบ debounce ไม่ block UI
   return html;
 }
 
