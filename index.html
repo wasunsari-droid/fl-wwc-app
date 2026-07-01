@@ -1353,26 +1353,36 @@ function observeThumb(el, tab, rid, photoFields) {
 // =========================================================
 // RENDER HELPERS
 // =========================================================
-const _thumbCache = {}; // key: "tab:recordId:fieldKeys" → html string
+const THUMB_CACHE_KEY = 'fl_thumb_cache';
+
+function _getThumbStore() {
+  try { return JSON.parse(sessionStorage.getItem(THUMB_CACHE_KEY) || '{}'); } catch(e) { return {}; }
+}
+function _saveThumbStore(store) {
+  try { sessionStorage.setItem(THUMB_CACHE_KEY, JSON.stringify(store)); } catch(e) {}
+}
 
 function _thumbCacheKey(tab, recordId, photoFields) {
   return tab + ':' + recordId + ':' + photoFields.map(function(p) { return p.key; }).join(',');
 }
 
 function invalidateThumbCache(tab, recordId) {
-  // ล้าง cache ของ record นั้น หรือทั้ง tab ถ้าไม่ระบุ record
-  Object.keys(_thumbCache).forEach(function(k) {
+  const store = _getThumbStore();
+  Object.keys(store).forEach(function(k) {
     if (recordId ? k.startsWith(tab + ':' + recordId + ':') : k.startsWith(tab + ':')) {
-      delete _thumbCache[k];
+      delete store[k];
     }
   });
+  _saveThumbStore(store);
 }
 
 async function makeThumbHtml(tab, recordId, photoFields) {
   const cacheKey = _thumbCacheKey(tab, recordId, photoFields);
-  if (_thumbCache[cacheKey]) return _thumbCache[cacheKey];
+  const store = _getThumbStore();
+  // cache hit: คืน HTML จาก sessionStorage
+  if (store[cacheKey]) return store[cacheKey];
 
-  // หา record จริงเพื่ออ่าน cloud: URL — ค้นจาก _id ก่อน แล้ว fallback index
+  // หา record จริงเพื่ออ่าน cloud: URL
   let record = null;
   if (DB[tab]) {
     record = DB[tab].find(function(r) { return r._id === recordId; });
@@ -1389,21 +1399,27 @@ async function makeThumbHtml(tab, recordId, photoFields) {
     }
     if (data) {
       const isCloud = typeof data === 'string' && data.startsWith('cloud:');
-      imgs.push({label: p.label, data, src: isCloud ? data.slice(6) : data});
+      imgs.push({ label: p.label, src: isCloud ? data.slice(6) : data });
     }
   }
-  const html = imgs.length === 0
-    ? '<span style="color:var(--gray-300);font-size:18px">📷</span>'
-    : (function() {
-        const srcs = imgs.map(function(im) { return im.src; });
-        const uid = 'lbs' + (++window._lbUid);
-        window[uid] = srcs;
-        return '<div class="img-thumbs">' + imgs.map(function(im, idx) {
-          return '<img class="img-thumb" src="' + im.src + '" title="' + im.label + '" onclick="openLightbox(window[\'' + uid + '\'][' + idx + '],window[\'' + uid + '\'])" alt="' + im.label + '" onerror="this.style.opacity=\'0.3\'">';
-        }).join('') + '</div>';
-      })();
 
-  _thumbCache[cacheKey] = html;
+  let html;
+  if (!imgs.length) {
+    html = '<span style="color:var(--gray-300);font-size:18px">📷</span>';
+  } else {
+    const srcs = imgs.map(function(im) { return im.src; });
+    const uid = 'lbs' + (++window._lbUid);
+    window[uid] = srcs;
+    html = '<div class="img-thumbs">' + imgs.map(function(im, idx) {
+      return '<img class="img-thumb" src="' + im.src + '" title="' + im.label +
+        '" onclick="openLightbox(window[\'' + uid + '\'][' + idx + '],window[\'' + uid + '\'])"' +
+        ' alt="' + im.label + '" onerror="this.style.opacity=\'0.3\'">';
+    }).join('') + '</div>';
+  }
+
+  // บันทึกลง sessionStorage
+  store[cacheKey] = html;
+  _saveThumbStore(store);
   return html;
 }
 
