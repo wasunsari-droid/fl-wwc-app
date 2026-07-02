@@ -2521,7 +2521,14 @@ function purchaseAddPartRow(part = {}) {
     { v: 'ได้รับยังไม่ครบ', label: 'ได้รับยังไม่ครบ' },
     { v: 'ได้รับครบแล้ว', label: 'ได้รับครบแล้ว' },
     { v: 'ยกเลิก',       label: '🚫 ยกเลิก' },
-  ].map(o => `<option value="${o.v}"${o.v === (part.status || '') ? ' selected' : ''}>${o.label}</option>`).join('');
+  ].map(o => {
+    // ถ้าสถานะที่บันทึกไว้ตรงกับค่าที่คำนวณอัตโนมัติจากจำนวนขอซื้อ/จำนวนที่รับ
+    // ให้ถือว่าเป็นสถานะอัตโนมัติ (ไม่ล็อก) เพื่อให้อัปเดตสถานะอัตโนมัติต่อไปเมื่อแก้ไขจำนวน
+    const autoStatus = calcPartStatus(part.ordered, part.received);
+    const isManual = part.status && part.status !== autoStatus;
+    const selectedVal = isManual ? part.status : '';
+    return `<option value="${o.v}"${o.v === selectedVal ? ' selected' : ''}>${o.label}</option>`;
+  }).join('');
 
   row.innerHTML = `
     <td><input type="text" data-part-field="name" list="purchase-part-memory" placeholder="เช่น น้ำมันเครื่อง" value="${escapeHtml(part.name || '')}" oninput="purchaseSyncParts()"></td>
