@@ -666,7 +666,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
           <thead><tr>
             <th style="width:44px">#</th>
             <th>วันที่</th><th>เลขใบขอซื้อ</th><th>เบอร์รถ</th><th>โมเดล</th><th>เลขเฟรม</th>
-            <th class="purchase-col-parts">รายการอะไหล่</th><th class="purchase-col-ordered" style="width:70px">จำนวนขอซื้อ</th><th class="purchase-col-received" style="width:70px">จำนวนที่รับ</th><th class="purchase-status-col" style="width:150px">สถานะ</th><th>รูปใบขอซื้อ</th>
+            <th class="purchase-col-partnum" style="width:110px">เบอร์อะไหล่</th><th class="purchase-col-parts">รายการอะไหล่</th><th class="purchase-col-ordered" style="width:70px">จำนวนขอซื้อ</th><th class="purchase-col-received" style="width:70px">จำนวนที่รับ</th><th class="purchase-status-col" style="width:150px">สถานะ</th><th>รูปใบขอซื้อ</th>
             <th style="width:110px">จัดการ</th>
           </tr></thead>
           <tbody id="tbody-purchase"></tbody>
@@ -959,6 +959,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
               <table class="purchase-parts-table">
                 <thead>
                   <tr>
+                    <th style="width:120px">เบอร์อะไหล่</th>
                     <th>รายการอะไหล่</th>
                     <th class="qty-cell">จำนวนขอซื้อ</th>
                     <th class="qty-cell">จำนวนที่รับ</th>
@@ -974,6 +975,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
               <button type="button" class="btn btn-outline btn-sm" onclick="purchaseAddPartRow()">+ เพิ่มรายการอะไหล่</button>
             </div>
           </div>
+          <input type="hidden" id="p-เบอร์อะไหล่">
           <input type="hidden" id="p-รายการอะไหล่">
           <input type="hidden" id="p-จำนวนขอซื้อ">
           <input type="hidden" id="p-จำนวนที่รับ">
@@ -1757,6 +1759,7 @@ async function showPurchaseDetail(idx) {
     partsEl.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:14px">' +
       '<thead><tr style="background:var(--gray-100)">' +
       '<th style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--gray-200)">#</th>' +
+      '<th style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--gray-200);width:110px">เบอร์อะไหล่</th>' +
       '<th style="padding:8px 12px;text-align:left;border-bottom:1px solid var(--gray-200)">รายการอะไหล่</th>' +
       '<th style="padding:8px 12px;text-align:center;border-bottom:1px solid var(--gray-200);width:75px">ขอซื้อ</th>' +
       '<th style="padding:8px 12px;text-align:center;border-bottom:1px solid var(--gray-200);width:75px">รับแล้ว</th>' +
@@ -1766,6 +1769,7 @@ async function showPurchaseDetail(idx) {
         const st = p.status || calcPartStatus(p.ordered, p.received);
         return '<tr style="border-bottom:1px solid var(--gray-100)">' +
           '<td style="padding:8px 12px;color:var(--gray-400);font-size:12px">' + (i+1) + '</td>' +
+          '<td style="padding:8px 12px;font-size:13px;color:var(--gray-600)">' + escapeHtml(p.partNumber || '-') + '</td>' +
           '<td style="padding:8px 12px;font-weight:500">' + escapeHtml(p.name || '-') + '</td>' +
           '<td style="padding:8px 12px;text-align:center">' + (p.ordered || '-') + '</td>' +
           '<td style="padding:8px 12px;text-align:center">' + (p.received || '-') + '</td>' +
@@ -1860,7 +1864,7 @@ function openStatusEditor() {
         { v: 'ยกเลิก', label: '🚫 ยกเลิก' },
       ].map(o => `<option value="${o.v}"${o.v === currentStatus ? ' selected' : ''}>${o.label}</option>`).join('');
       return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--gray-100)">
-        <div style="flex:1;font-size:13px;font-weight:500;color:var(--gray-700)">${i+1}. ${escapeHtml(p.name || '-')}
+        <div style="flex:1;font-size:13px;font-weight:500;color:var(--gray-700)">${i+1}. ${p.partNumber ? '<span style="color:var(--gray-400);font-weight:400">[' + escapeHtml(p.partNumber) + ']</span> ' : ''}${escapeHtml(p.name || '-')}
           <span style="font-size:11px;color:var(--gray-400);margin-left:6px">(ขอ: ${p.ordered || 0} / รับ: ${p.received || 0})</span>
         </div>
         <select id="se-part-status-${i}" style="height:34px;padding:0 8px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;font-family:var(--font);min-width:160px">
@@ -1924,6 +1928,7 @@ async function saveStatusEditor() {
     });
     r['รายการอะไหล่แยก'] = JSON.stringify(parts);
     // Sync legacy fields
+    r['เบอร์อะไหล่'] = parts.map(p => p.partNumber || '').join('\n');
     r['รายการอะไหล่'] = parts.map(p => p.name).join('\n');
     r['จำนวนขอซื้อ'] = parts.map(p => p.ordered).join('\n');
     r['จำนวนที่รับ'] = parts.map(p => p.received).join('\n');
@@ -2434,26 +2439,29 @@ function parsePurchaseParts(row) {
       if (Array.isArray(parsed)) {
         return parsed.map(p => ({
           name: String(p.name || '').trim(),
+          partNumber: String(p.partNumber || '').trim(),
           ordered: Number(p.ordered) || 0,
           received: Number(p.received) || 0,
           status: p.status || calcPartStatus(p.ordered, p.received)
-        })).filter(p => p.name || p.ordered || p.received);
+        })).filter(p => p.name || p.partNumber || p.ordered || p.received);
       }
     } catch (e) {}
   }
   const names = splitPurchaseValues(row['รายการอะไหล่']);
+  const partNumbers = splitPurchaseValues(row['เบอร์อะไหล่']);
   const ordered = splitPurchaseValues(row['จำนวนขอซื้อ']);
   const received = splitPurchaseValues(row['จำนวนที่รับ']);
-  const len = Math.max(names.length, ordered.length, received.length);
+  const len = Math.max(names.length, partNumbers.length, ordered.length, received.length);
   const parts = [];
   for (let i = 0; i < len; i++) {
     const part = {
       name: names[i] || '',
+      partNumber: partNumbers[i] || '',
       ordered: Number(ordered[i]) || 0,
       received: Number(received[i]) || 0
     };
     part.status = calcPartStatus(part.ordered, part.received);
-    if (part.name || part.ordered || part.received) parts.push(part);
+    if (part.name || part.partNumber || part.ordered || part.received) parts.push(part);
   }
   return parts;
 }
@@ -2474,7 +2482,7 @@ function summarizePurchaseStatus(parts) {
 function renderPurchasePartList(parts, key, showNumber = true) {
   if (!parts.length) return '';
   return '<div class="purchase-part-summary ' + (key === 'name' ? 'purchase-part-name-list' : '') + '">' + parts.map((p, i) => {
-    const value = key === 'name' ? p.name : key === 'ordered' ? p.ordered : key === 'received' ? p.received : (p.status || calcPartStatus(p.ordered, p.received));
+    const value = key === 'name' ? p.name : key === 'partNumber' ? p.partNumber : key === 'ordered' ? p.ordered : key === 'received' ? p.received : (p.status || calcPartStatus(p.ordered, p.received));
     const prefix = showNumber ? (i + 1) + '. ' : '';
     if (key === 'status') {
       return '<div class="purchase-part-line" title="' + escapeHtml(value) + '">' + prefix + '<span class="badge ' + (statusBadge[value] || 'badge-gray') + '">' + escapeHtml(value || '-') + '</span></div>';
@@ -2505,23 +2513,26 @@ function rememberPurchaseParts(parts) {
 
 function purchaseReadPartsFromForm() {
   return [...document.querySelectorAll('#purchase-parts-tbody tr')].map(row => {
+    const partNumber = row.querySelector('[data-part-field="partNumber"]')?.value.trim() || '';
     const name     = row.querySelector('[data-part-field="name"]')?.value.trim() || '';
     const ordered  = Number(row.querySelector('[data-part-field="ordered"]')?.value) || 0;
     const received = Number(row.querySelector('[data-part-field="received"]')?.value) || 0;
     // อ่านสถานะจาก select ที่ผู้ใช้เลือก (ถ้ามี) มิฉะนั้นคำนวณอัตโนมัติ
     const sel      = row.querySelector('[data-part-status-select]');
     const status   = sel ? (sel.value || calcPartStatus(ordered, received)) : calcPartStatus(ordered, received);
-    return { name, ordered, received, status };
-  }).filter(p => p.name || p.ordered || p.received);
+    return { partNumber, name, ordered, received, status };
+  }).filter(p => p.name || p.partNumber || p.ordered || p.received);
 }
 
 function purchaseSyncParts() {
   const parts   = purchaseReadPartsFromForm();
+  const partNumbers = parts.map(p => p.partNumber || '');
   const names   = parts.map(p => p.name);
   const ordered = parts.map(p => p.ordered || 0);
   const received= parts.map(p => p.received || 0);
   const status  = summarizePurchaseStatus(parts);
   const set = (id, value) => { const el = document.getElementById(id); if (el) el.value = value; };
+  set('p-เบอร์อะไหล่', partNumbers.join('\n'));
   set('p-รายการอะไหล่', names.join('\n'));
   set('p-จำนวนขอซื้อ', ordered.join(','));
   set('p-จำนวนที่รับ', received.join(','));
@@ -2555,6 +2566,7 @@ function purchaseAddPartRow(part = {}) {
   }).join('');
 
   row.innerHTML = `
+    <td><input type="text" data-part-field="partNumber" placeholder="เช่น GS-MFX-70L" value="${escapeHtml(part.partNumber || '')}" oninput="purchaseSyncParts()"></td>
     <td><input type="text" data-part-field="name" list="purchase-part-memory" placeholder="เช่น น้ำมันเครื่อง" value="${escapeHtml(part.name || '')}" oninput="purchaseSyncParts()"></td>
     <td class="qty-cell"><input type="number" min="0" data-part-field="ordered" value="${part.ordered ?? ''}" oninput="purchaseUpdatePartRow(this)"></td>
     <td class="qty-cell"><input type="number" min="0" data-part-field="received" value="${part.received ?? ''}" oninput="purchaseUpdatePartRow(this)"></td>
@@ -2622,7 +2634,7 @@ async function renderPurchase() {
   yearSel.value = curYear;
 
   let rows = DB.purchase.filter(r => {
-    const match = !q || ['เลขใบขอซื้อ','เบอร์รถ','โมเดล','เลขเฟรม','รายการอะไหล่'].some(k => (r[k]||'').toLowerCase().includes(q));
+    const match = !q || ['เลขใบขอซื้อ','เบอร์รถ','โมเดล','เลขเฟรม','เบอร์อะไหล่','รายการอะไหล่'].some(k => (r[k]||'').toLowerCase().includes(q));
     if (!match) return false;
     if (fStatus && r['สถานะ'] !== fStatus) return false;
     if (fYear  && !(r['วันที่']||'').startsWith(fYear)) return false;
@@ -2643,7 +2655,7 @@ async function renderPurchase() {
   const pageRows = rows.slice(start, start + PER_PAGE);
   const tbody = document.getElementById('tbody-purchase');
   if (!pageRows.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="12">ไม่พบข้อมูล</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="13">ไม่พบข้อมูล</td></tr>';
   } else {
     tbody.innerHTML = pageRows.map((r, i) => {
       const realIdx = DB.purchase.indexOf(r);
@@ -2654,6 +2666,7 @@ async function renderPurchase() {
         <td>${r['เบอร์รถ']||'-'}</td>
         <td>${r['โมเดล']||'-'}</td>
         <td style="font-size:12px">${r['เลขเฟรม']||'-'}</td>
+        <td class="purchase-col-partnum">${renderPurchasePartList(parsePurchaseParts(r), 'partNumber', false)}</td>
         <td class="purchase-col-parts">${renderPurchasePartList(parsePurchaseParts(r), 'name')}</td>
         <td class="purchase-col-ordered">${renderPurchasePartList(parsePurchaseParts(r), 'ordered', false)}</td>
         <td class="purchase-col-received">${renderPurchasePartList(parsePurchaseParts(r), 'received', false)}</td>
@@ -2681,7 +2694,7 @@ async function editPurchase(idx) {
   editIdx.purchase = idx;
   const r = DB.purchase[idx];
   document.getElementById('modal-pur-title').textContent = 'แก้ไขใบขอซื้อ';
-  ['วันที่','เลขใบขอซื้อ','รายการอะไหล่','สถานะ','บันทึก'].forEach(f => {
+  ['วันที่','เลขใบขอซื้อ','เบอร์อะไหล่','รายการอะไหล่','สถานะ','บันทึก'].forEach(f => {
     const el = document.getElementById('p-'+f); if(el) el.value = r[f]||'';
   });
   // Populate dropdown then set saved value
@@ -2705,7 +2718,7 @@ async function editPurchase(idx) {
 
 async function savePurchase() {
   if (!document.getElementById('p-วันที่').value) { showToast('กรุณากรอกวันที่', 'error'); return; }
-  const fields = ['วันที่','เลขใบขอซื้อ','เบอร์รถ','โมเดล','เลขเฟรม','รายการอะไหล่','จำนวนขอซื้อ','จำนวนที่รับ','สถานะ','บันทึก'];
+  const fields = ['วันที่','เลขใบขอซื้อ','เบอร์รถ','โมเดล','เลขเฟรม','เบอร์อะไหล่','รายการอะไหล่','จำนวนขอซื้อ','จำนวนที่รับ','สถานะ','บันทึก'];
   const parts = purchaseSyncParts();
   if (!parts.length || parts.some(p => !p.name)) { showToast('กรุณากรอกรายการอะไหล่', 'error'); return; }
   rememberPurchaseParts(parts);
@@ -2850,7 +2863,7 @@ function openModal(tab) {
     clearPhotoGrid(WORK_PHOTOS);
   } else {
     document.getElementById('modal-pur-title').textContent = 'เพิ่มใบขอซื้อ';
-    ['วันที่','เลขใบขอซื้อ','โมเดล','เลขเฟรม','รายการอะไหล่','จำนวนขอซื้อ','จำนวนที่รับ','สถานะ','บันทึก'].forEach(f => { const el = document.getElementById('p-'+f); if(el) el.value=''; });
+    ['วันที่','เลขใบขอซื้อ','โมเดล','เลขเฟรม','เบอร์อะไหล่','รายการอะไหล่','จำนวนขอซื้อ','จำนวนที่รับ','สถานะ','บันทึก'].forEach(f => { const el = document.getElementById('p-'+f); if(el) el.value=''; });
     populateCarDropdowns();
     document.getElementById('p-เบอร์รถ').value = '';
     purchaseLoadParts([]);
@@ -3397,7 +3410,7 @@ async function exportAll() {
   if (typeof DB==='undefined') { alert('ไม่พบฐานข้อมูล'); return; }
   const rentCols = ['ลำดับ','เบอร์รถ','โมเดล','เลขเฟรม','ประเภท','ยี่ห้อ','เสา','ขนาดล้อหน้า-สี','ขนาดล้อหลัง-สี','ชื่อลูกค้า','ที่อยู่','วันที่เช่า','บันทึก'].concat(getPhotoFieldKeys(RENT_PHOTOS));
   const workCols = ['วันที่','เลขเล่ม-เลขที่','เบอร์รถ','โมเดล','เลขเฟรม','ประเภทงาน','รายการอไหล่','จำนวน','เลขใบขอซื้อ','บันทึก'].concat(getPhotoFieldKeys(WORK_PHOTOS));
-  const purCols = ['วันที่','เลขใบขอซื้อ','เบอร์รถ','โมเดล','เลขเฟรม','รายการอะไหล่','จำนวนขอซื้อ','จำนวนที่รับ','สถานะ','บันทึก'].concat(getPhotoFieldKeys(PUR_PHOTOS));
+  const purCols = ['วันที่','เลขใบขอซื้อ','เบอร์รถ','โมเดล','เลขเฟรม','เบอร์อะไหล่','รายการอะไหล่','จำนวนขอซื้อ','จำนวนที่รับ','สถานะ','บันทึก'].concat(getPhotoFieldKeys(PUR_PHOTOS));
   const rentRows = await addPhotoLinksToRows('rent', DB.rent || [], RENT_PHOTOS);
   const workRows = await addPhotoLinksToRows('work', DB.work || [], WORK_PHOTOS);
   const purRows = await addPhotoLinksToRows('purchase', DB.purchase || [], PUR_PHOTOS);
