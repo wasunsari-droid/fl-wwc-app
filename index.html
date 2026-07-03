@@ -1080,11 +1080,24 @@ function genImgKey(tab, recordId, field) {
   return tab + '_' + recordId + '_' + field;
 }
 
+// หาค่าฟิลด์แบบ "ยืดหยุ่น" — เผื่อกรณี header ใน Google Sheet มีช่องว่างเกิน/ตัวพิมพ์เล็กใหญ่ต่างจากที่โค้ดคาดไว้
+// (เช่นแก้ header ในชีทด้วยมือแล้วมี trailing space) ทำให้ property lookup แบบตรงตัวหาไม่เจอ
+function getFieldFuzzy(record, key) {
+  if (!record) return null;
+  if (record[key] !== undefined && record[key] !== null && record[key] !== '') return record[key];
+  const norm = s => s.trim().toLowerCase().normalize('NFC');
+  const target = norm(key);
+  for (const k in record) {
+    if (norm(k) === target && record[k]) return record[k];
+  }
+  return null;
+}
+
 // อ่านรูปสำหรับแสดงผล (view-only): เช็ค record field ก่อน (รูปที่ sync จาก Drive/Sheets)
 // แล้วค่อย fallback ไปอ่านจาก IndexedDB (รูปเก่าที่เก็บไว้ในเครื่องก่อน login Google)
 // ใช้ตรรกะเดียวกับ loadPhotosForEdit เพื่อให้ popup ดูรายละเอียดเห็นรูปตรงกับตอนแก้ไข
 async function resolvePhotoForView(tab, recordId, field, record) {
-  const fromRecord = record && record[field] ? record[field] : null;
+  const fromRecord = getFieldFuzzy(record, field);
   if (fromRecord) return stripCloudPrefix(fromRecord);
   const k = genImgKey(tab, recordId, field);
   const data = await idbGet(k);
@@ -1271,7 +1284,7 @@ async function loadPhotosForEdit(tab, recordId, photoFields, record) {
   currentPhotos = {};
   for (const p of photoFields) {
     // อ่านจาก record field ก่อน (รูปที่ sync มาจาก Drive/Sheets)
-    const fromRecord = record && record[p.key] ? record[p.key] : null;
+    const fromRecord = getFieldFuzzy(record, p.key);
     if (fromRecord) {
       const cleanRecordPhoto = stripCloudPrefix(fromRecord);
       currentPhotos[p.key] = cleanRecordPhoto;
@@ -1439,10 +1452,8 @@ async function makeThumbHtml(tab, recordId, photoFields) {
   }
   const imgs = [];
   for (const p of photoFields) {
-    let data = null;
-    if (record && record[p.key]) {
-      data = record[p.key];
-    } else {
+    let data = getFieldFuzzy(record, p.key);
+    if (!data) {
       const k = genImgKey(tab, recordId, p.key);
       data = await idbGet(k);
     }
