@@ -173,6 +173,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   /* คอลัมน์สถานะ: ให้ badge แสดงข้อความเต็มในบรรทัดเดียวกับเลขลำดับ ไม่ตัดคำ ไม่ขึ้นบรรทัดใหม่ */
   .purchase-status-col .purchase-part-line { white-space: nowrap; overflow: visible; text-overflow: unset; }
   .purchase-status-col .badge { white-space: nowrap; display: inline-flex; }
+  .purchase-col-ordered, .purchase-col-received { text-align: left; }
 
   /* Modal */
   .modal-overlay {
@@ -669,7 +670,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
           <thead><tr>
             <th style="width:44px">#</th>
             <th>วันที่</th><th>เลขใบขอซื้อ</th><th>เบอร์รถ</th><th>โมเดล</th><th>เลขเฟรม</th>
-            <th class="purchase-col-partnum" style="width:110px">เบอร์อะไหล่</th><th class="purchase-col-parts">รายการอะไหล่</th><th class="purchase-col-ordered" style="width:40px;text-align:center">จำนวน<br>ขอซื้อ</th><th class="purchase-col-received" style="width:40px;text-align:center">จำนวน<br>ที่รับ</th><th class="purchase-status-col" style="width:200px">สถานะ</th><th>รูปใบขอซื้อ</th>
+            <th class="purchase-col-partnum" style="width:110px">เบอร์อะไหล่</th><th class="purchase-col-parts">รายการอะไหล่</th><th class="purchase-col-ordered" style="width:40px;text-align:left">จำนวน<br>ขอซื้อ</th><th class="purchase-col-received" style="width:40px;text-align:left">จำนวน<br>ที่รับ</th><th class="purchase-status-col" style="width:200px">สถานะ</th><th>รูปใบขอซื้อ</th>
             <th style="width:110px">จัดการ</th>
           </tr></thead>
           <tbody id="tbody-purchase"></tbody>
