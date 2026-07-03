@@ -922,7 +922,12 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
           <input type="hidden" id="w-รายการอไหล่">
           <input type="hidden" id="w-จำนวน">
         </div>
-        <div class="form-group"><label>เลขใบขอซื้อ</label><input type="text" id="w-เลขใบขอซื้อ"></div>
+        <div class="form-group span-2">
+          <label>เลขใบขอซื้อ</label>
+          <div id="work-po-list" style="display:flex;flex-direction:column;gap:6px"></div>
+          <button type="button" class="btn btn-outline btn-sm" style="margin-top:6px" onclick="workAddPoRow()">+ เพิ่มเลขใบขอซื้อ</button>
+          <input type="hidden" id="w-เลขใบขอซื้อ">
+        </div>
         <div class="form-group span-2"><label>บันทึก</label><textarea id="w-บันทึก" rows="2" style="width:100%"></textarea></div>
       </div>
       <div class="photo-section-title">รูปใบงาน — คลิกเพื่อเลือกไฟล์จากเครื่อง</div>
@@ -1511,7 +1516,15 @@ async function renderRentGrouped(rows) {
     if (!groups[key]) groups[key] = [];
     groups[key].push(r);
   });
-  const sortedKeys = Object.keys(groups).sort((a, b) => a.localeCompare(b, 'th'));
+  const isEnglishStart = s => /^[a-zA-Z]/.test(s);
+  const sortedKeys = Object.keys(groups).sort((a, b) => {
+    if (a === '(ไม่ระบุลูกค้า)') return 1;
+    if (b === '(ไม่ระบุลูกค้า)') return -1;
+    const aEn = isEnglishStart(a), bEn = isEnglishStart(b);
+    if (aEn && !bEn) return -1;   // อังกฤษมาก่อนไทยเสมอ
+    if (!aEn && bEn) return 1;
+    return aEn ? a.localeCompare(b, 'en') : a.localeCompare(b, 'th');
+  });
 
   let html = '';
   sortedKeys.forEach(customer => {
@@ -1976,10 +1989,13 @@ async function showWorkDetail(idx) {
   infoEl.innerHTML = fieldMap.map(function(f) {
     const val = r[f.key] || '-';
     if (f.key === 'เลขใบขอซื้อ' && r[f.key]) {
-      const purIdx = DB.purchase.findIndex(function(p) { return p['เลขใบขอซื้อ'] === r[f.key]; });
-      const valHtml = purIdx >= 0
-        ? '<span style="color:var(--primary);cursor:pointer;text-decoration:underline;text-underline-offset:3px;font-weight:600;font-size:14px" onclick="closeWorkDetail();showPurchaseDetail(' + purIdx + ')">' + escapeHtml(r[f.key]) + '</span>'
-        : '<span style="font-weight:600;font-size:14px">' + escapeHtml(r[f.key]) + '</span>';
+      const poNumbers = r[f.key].split(/[\n,]+/).map(function(v){ return v.trim(); }).filter(Boolean);
+      const valHtml = poNumbers.map(function(po) {
+        const purIdx = DB.purchase.findIndex(function(p) { return p['เลขใบขอซื้อ'] === po; });
+        return purIdx >= 0
+          ? '<span style="color:var(--primary);cursor:pointer;text-decoration:underline;text-underline-offset:3px;font-weight:600;font-size:14px;margin-right:10px;display:inline-block" onclick="closeWorkDetail();showPurchaseDetail(' + purIdx + ')">' + escapeHtml(po) + '</span>'
+          : '<span style="font-weight:600;font-size:14px;margin-right:10px;display:inline-block">' + escapeHtml(po) + '</span>';
+      }).join('');
       return '<div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:10px;padding:12px">' +
         '<div style="font-size:11px;color:var(--gray-400);margin-bottom:4px">' + f.label + '</div>' +
         '<div>' + valHtml + '</div>' +
@@ -2191,7 +2207,7 @@ async function editWork(idx) {
   editIdx.work = idx;
   const r = DB.work[idx];
   document.getElementById('modal-work-title').textContent = 'แก้ไขใบงาน';
-  ['วันที่','เลขเล่ม-เลขที่','เลขใบขอซื้อ','บันทึก'].forEach(f => {
+  ['วันที่','เลขเล่ม-เลขที่','บันทึก'].forEach(f => {
     const el = document.getElementById('w-'+f); if(el) el.value = r[f]||'';
   });
   // Restore multi-checkbox ประเภทงาน
@@ -2212,6 +2228,7 @@ async function editWork(idx) {
   document.getElementById('w-โมเดล').value = r['โมเดล']||'';
   document.getElementById('w-เลขเฟรม').value = r['เลขเฟรม']||'';
   workLoadParts(parseWorkParts(r));
+  workLoadPoNumbers(r['เลขใบขอซื้อ']);
   buildPhotoGrid('photo-grid-work', WORK_PHOTOS);
   await loadPhotosForEdit('work', r._id || idx, WORK_PHOTOS, r);
   document.getElementById('modal-work').classList.add('open');
@@ -2299,6 +2316,7 @@ async function saveWork() {
   document.getElementById('w-ประเภทงาน').value = checkedTypes.join(', ');
   const workParts = workSyncParts();
   if (workParts.length) rememberWorkParts(workParts);
+  workSyncPoNumbers();
   const fields = ['วันที่','เลขเล่ม-เลขที่','เบอร์รถ','โมเดล','เลขเฟรม','ประเภทงาน','รายการอไหล่','จำนวน','เลขใบขอซื้อ','บันทึก'];
   const obj = {};
   fields.forEach(f => { const el = document.getElementById('w-'+f); if(el) obj[f] = el.value.trim(); });
@@ -2407,6 +2425,44 @@ function workLoadParts(partsOrString) {
   }
   (parts.length ? parts : [{}]).forEach(function(p) { workAddPartRow(p); });
   workSyncParts();
+}
+
+// เลขใบขอซื้อ — รองรับเพิ่มได้หลายเลข (กรณีใบงานเดียวอ้างอิงหลายใบขอซื้อ)
+function workAddPoRow(value) {
+  const list = document.getElementById('work-po-list');
+  if (!list) return;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:6px;align-items:center';
+  const val = (value || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  row.innerHTML =
+    '<input type="text" data-work-po-field placeholder="เช่น 184_WWC9198" value="' + val + '" oninput="workSyncPoNumbers()" style="flex:1;height:34px;padding:0 10px;border:1px solid var(--gray-300);border-radius:8px;font-size:13px;font-family:var(--font)">' +
+    '<button type="button" class="btn btn-danger btn-sm" onclick="workRemovePoRow(this)">ลบ</button>';
+  list.appendChild(row);
+  workSyncPoNumbers();
+  const input = row.querySelector('[data-work-po-field]');
+  if (!value && input) input.focus();
+}
+
+function workRemovePoRow(btn) {
+  btn.closest('div').remove();
+  if (!document.querySelector('#work-po-list > div')) workAddPoRow('');
+  workSyncPoNumbers();
+}
+
+function workSyncPoNumbers() {
+  const values = [...document.querySelectorAll('#work-po-list [data-work-po-field]')].map(el => el.value.trim()).filter(Boolean);
+  const el = document.getElementById('w-เลขใบขอซื้อ');
+  if (el) el.value = values.join('\n');
+  return values;
+}
+
+function workLoadPoNumbers(value) {
+  const list = document.getElementById('work-po-list');
+  if (!list) return;
+  list.innerHTML = '';
+  const values = (value || '').split(/[\n,]+/).map(v => v.trim()).filter(Boolean);
+  (values.length ? values : ['']).forEach(v => workAddPoRow(v));
+  workSyncPoNumbers();
 }
 
 function parseWorkParts(row) {
@@ -2846,11 +2902,12 @@ function openModal(tab) {
     clearPhotoGrid(RENT_PHOTOS);
   } else if (tab === 'work') {
     document.getElementById('modal-work-title').textContent = 'เพิ่มใบงาน';
-    ['วันที่','เลขเล่ม-เลขที่','โมเดล','เลขเฟรม','ประเภทงาน','เลขใบขอซื้อ','บันทึก'].forEach(f => { const el = document.getElementById('w-'+f); if(el) el.value=''; });
+    ['วันที่','เลขเล่ม-เลขที่','โมเดล','เลขเฟรม','ประเภทงาน','บันทึก'].forEach(f => { const el = document.getElementById('w-'+f); if(el) el.value=''; });
     renderWorkTypeCheckboxes([]);
     populateCarDropdowns();
     document.getElementById('w-เบอร์รถ').value = '';
     workLoadParts([]);
+    workLoadPoNumbers('');
     buildPhotoGrid('photo-grid-work', WORK_PHOTOS);
     clearPhotoGrid(WORK_PHOTOS);
   } else {
