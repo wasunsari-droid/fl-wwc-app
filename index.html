@@ -170,6 +170,9 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   .purchase-part-summary { display: grid; gap: 4px; line-height: 1.45; min-width: 90px; }
   .purchase-part-name-list { min-width: 180px; max-width: 260px; }
   .purchase-part-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* คอลัมน์สถานะ: ให้ badge แสดงข้อความเต็มในบรรทัดเดียวกับเลขลำดับ ไม่ตัดคำ ไม่ขึ้นบรรทัดใหม่ */
+  .purchase-status-col .purchase-part-line { white-space: nowrap; overflow: visible; text-overflow: unset; }
+  .purchase-status-col .badge { white-space: nowrap; display: inline-flex; }
 
   /* Modal */
   .modal-overlay {
@@ -455,10 +458,10 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     .purchase-part-name-list { min-width: 90px; max-width: 120px; }
     .purchase-part-line { font-size: 10px; }
     /* ขยาย column สถานะบน mobile */
-    .purchase-status-col { min-width: 120px !important; width: 140px !important; }
-    /* ให้ badge สถานะ wrap ได้และแสดงเต็ม */
-    .purchase-status-col .badge { white-space: normal; display: inline-block; }
-    .purchase-status-col .purchase-part-line { white-space: normal; overflow: visible; text-overflow: unset; }
+    .purchase-status-col { min-width: 150px !important; width: 170px !important; }
+    /* ให้ badge สถานะอยู่บรรทัดเดียวกับเลขลำดับ ไม่ตัดคำ */
+    .purchase-status-col .badge { white-space: nowrap; display: inline-flex; }
+    .purchase-status-col .purchase-part-line { white-space: nowrap; overflow: visible; text-overflow: unset; }
   }
 </style>
 </head>
@@ -666,7 +669,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
           <thead><tr>
             <th style="width:44px">#</th>
             <th>วันที่</th><th>เลขใบขอซื้อ</th><th>เบอร์รถ</th><th>โมเดล</th><th>เลขเฟรม</th>
-            <th class="purchase-col-partnum" style="width:110px">เบอร์อะไหล่</th><th class="purchase-col-parts">รายการอะไหล่</th><th class="purchase-col-ordered" style="width:70px">จำนวนขอซื้อ</th><th class="purchase-col-received" style="width:70px">จำนวนที่รับ</th><th class="purchase-status-col" style="width:150px">สถานะ</th><th>รูปใบขอซื้อ</th>
+            <th class="purchase-col-partnum" style="width:110px">เบอร์อะไหล่</th><th class="purchase-col-parts">รายการอะไหล่</th><th class="purchase-col-ordered" style="width:40px;text-align:center">จำนวน<br>ขอซื้อ</th><th class="purchase-col-received" style="width:40px;text-align:center">จำนวน<br>ที่รับ</th><th class="purchase-status-col" style="width:200px">สถานะ</th><th>รูปใบขอซื้อ</th>
             <th style="width:110px">จัดการ</th>
           </tr></thead>
           <tbody id="tbody-purchase"></tbody>
