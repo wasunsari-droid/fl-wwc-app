@@ -1765,7 +1765,25 @@ async function showPurchaseDetail(idx) {
       '<div style="font-size:11px;color:var(--gray-400);margin-bottom:4px">' + f.label + '</div>' +
       '<div style="font-weight:600;color:var(--gray-800);font-size:14px">' + val + '</div>' +
       '</div>';
-  }).join('');
+  }).join('') +
+  // เลขใบงาน — หาใบงานที่อ้างอิงใบขอซื้อนี้ (reverse lookup)
+  (function() {
+    const linkedWorkIdxs = DB.work.reduce(function(acc, w, i) {
+      const poNumbers = (w['เลขใบขอซื้อ'] || '').split(/[\n,]+/).map(function(v){ return v.trim(); }).filter(Boolean);
+      if (poNumbers.includes(docNo)) acc.push(i);
+      return acc;
+    }, []);
+    const workValHtml = linkedWorkIdxs.length
+      ? linkedWorkIdxs.map(function(wi) {
+          const wDocNo = DB.work[wi]['เลขเล่ม-เลขที่'] || '-';
+          return '<span style="color:var(--primary);cursor:pointer;text-decoration:underline;text-underline-offset:3px;font-weight:600;font-size:14px;margin-right:10px;display:inline-block" onclick="closePurchaseDetail();showWorkDetail(' + wi + ')">' + escapeHtml(wDocNo) + '</span>';
+        }).join('')
+      : '<span style="font-weight:600;color:var(--gray-800);font-size:14px">-</span>';
+    return '<div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:10px;padding:12px">' +
+      '<div style="font-size:11px;color:var(--gray-400);margin-bottom:4px">🔧 เลขใบงาน</div>' +
+      '<div>' + workValHtml + '</div>' +
+      '</div>';
+  })();
 
   // Parts section
   const partsSection = document.getElementById('pur-detail-parts-section');
