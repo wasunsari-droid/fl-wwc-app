@@ -632,7 +632,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     <div class="toolbar">
       <div class="search-box">
         
-        <input type="text" placeholder="ค้นหา เลขใบขอซื้อ, เบอร์รถ, เลขเฟรม..." id="search-purchase" oninput="renderPurchase()">
+        <input type="text" placeholder="ค้นหา เลขใบขอซื้อ, เลขใบงาน, เบอร์รถ, เลขเฟรม..." id="search-purchase" oninput="renderPurchase()">
       </div>
       <select id="filter-pur-year" onchange="renderPurchase()" style="height:38px;padding:0 12px;border:1px solid var(--gray-300);border-radius:8px;font-size:14px;font-family:var(--font)">
         <option value="">ทุกปี</option>
@@ -2701,7 +2701,12 @@ async function renderPurchase() {
   yearSel.value = curYear;
 
   let rows = DB.purchase.filter(r => {
-    const match = !q || ['เลขใบขอซื้อ','เบอร์รถ','โมเดล','เลขเฟรม','รายการอะไหล่'].some(k => (r[k]||'').toLowerCase().includes(q));
+    const linkedWorkNos = DB.work.filter(function(w) {
+      const poNumbers = (w['เลขใบขอซื้อ'] || '').split(/[\n,]+/).map(function(v){ return v.trim(); });
+      return poNumbers.includes(r['เลขใบขอซื้อ']);
+    }).map(function(w) { return w['เลขเล่ม-เลขที่'] || ''; });
+    const match = !q || ['เลขใบขอซื้อ','เบอร์รถ','โมเดล','เลขเฟรม','รายการอะไหล่'].some(k => (r[k]||'').toLowerCase().includes(q))
+      || linkedWorkNos.some(function(no) { return no.toLowerCase().includes(q); });
     if (!match) return false;
     if (fStatus && r['สถานะ'] !== fStatus) return false;
     if (fYear  && !(r['วันที่']||'').startsWith(fYear)) return false;
