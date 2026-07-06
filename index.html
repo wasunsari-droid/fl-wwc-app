@@ -365,6 +365,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   }
   #pin-input:focus { border-color: var(--primary); }
   #pin-input.pin-error { border-color: #ef4444; animation: shake 0.3s; }
+  #pin-input:disabled, #pin-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   @keyframes shake {
     0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)}
   }
@@ -497,12 +498,12 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
   </div>
   <span class="offline-badge">🟢 Online</span>
   <div class="header-actions">
-    <button class="btn btn-outline" onclick="exportAll()">📤 ส่งออก Excel</button>
+    <button class="btn btn-outline admin-only" onclick="exportAll()">📤 ส่งออก Excel</button>
     <label class="btn btn-outline admin-only" style="cursor:pointer;">
       📥 นำเข้า Excel
       <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importExcel(event)">
     </label>
-    <button class="btn btn-outline" onclick="exportZip()" title="ส่งออกข้อมูลพร้อมรูปภาพทั้งหมด">📦 สำรองข้อมูล+รูป</button>
+    <button class="btn btn-outline admin-only" onclick="exportZip()" title="ส่งออกข้อมูลพร้อมรูปภาพทั้งหมด">📦 สำรองข้อมูล+รูป</button>
     <label class="btn btn-outline admin-only" style="cursor:pointer;" title="นำเข้าข้อมูลพร้อมรูปภาพจากไฟล์สำรอง">
       📂 กู้คืนข้อมูล+รูป
       <input type="file" accept=".zip" style="display:none" onchange="importZip(event)">
@@ -3590,6 +3591,81 @@ const PIN_HASH = 'a5c3dd48facf21ed5f916d0ae979091fead570e6aea6c1d8038d1f68b26fa5
 let adminMode = false;
 let pinCallback = null; // function to run after unlock
 
+const PIN_FAIL_KEY = 'fl_pin_fail_count';
+const PIN_LOCK_KEY = 'fl_pin_lock_until';
+const PIN_MAX_ATTEMPTS = 3;
+const PIN_LOCKOUT_MS = 30 * 60 * 1000; // 30 นาที
+
+function getPinLockRemainingMs() {
+  const lockRaw = localStorage.getItem(PIN_LOCK_KEY);
+  if (!lockRaw) return 0; // ไม่เคยถูกล็อก — ไม่ต้องยุ่งกับตัวนับความผิดพลาด
+  const until = Number(lockRaw);
+  const remaining = until - Date.now();
+  if (remaining <= 0) {
+    // หมดเวลาล็อกที่เคยตั้งไว้แล้ว เคลียร์สถานะเพื่อเริ่มนับใหม่
+    localStorage.removeItem(PIN_LOCK_KEY);
+    localStorage.removeItem(PIN_FAIL_KEY);
+    return 0;
+  }
+  return remaining;
+}
+
+function recordPinFailure() {
+  const count = Number(localStorage.getItem(PIN_FAIL_KEY) || 0) + 1;
+  if (count >= PIN_MAX_ATTEMPTS) {
+    localStorage.setItem(PIN_LOCK_KEY, String(Date.now() + PIN_LOCKOUT_MS));
+    localStorage.setItem(PIN_FAIL_KEY, '0');
+  } else {
+    localStorage.setItem(PIN_FAIL_KEY, String(count));
+  }
+  return count;
+}
+
+function clearPinFailures() {
+  localStorage.removeItem(PIN_FAIL_KEY);
+  localStorage.removeItem(PIN_LOCK_KEY);
+}
+
+function formatLockRemaining(ms) {
+  const totalSec = Math.ceil(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return min > 0 ? `${min} นาที ${sec} วินาที` : `${sec} วินาที`;
+}
+
+let pinLockTimer = null;
+function updatePinLockUI() {
+  const remaining = getPinLockRemainingMs();
+  const input = document.getElementById('pin-input');
+  const submitBtn = document.getElementById('pin-submit-btn');
+  const desc = document.getElementById('pin-modal-desc');
+  if (remaining > 0) {
+    input.disabled = true;
+    if (submitBtn) submitBtn.disabled = true;
+    desc.textContent = `ใส่ PIN ผิดเกิน ${PIN_MAX_ATTEMPTS} ครั้ง กรุณารออีก ${formatLockRemaining(remaining)}`;
+    if (!pinLockTimer) {
+      pinLockTimer = setInterval(() => {
+        const left = getPinLockRemainingMs();
+        if (left <= 0) {
+          clearInterval(pinLockTimer);
+          pinLockTimer = null;
+          input.disabled = false;
+          if (submitBtn) submitBtn.disabled = false;
+          desc.textContent = 'ใส่ PIN 4 หลักเพื่อเข้าโหมดแก้ไข';
+        } else {
+          desc.textContent = `ใส่ PIN ผิดเกิน ${PIN_MAX_ATTEMPTS} ครั้ง กรุณารออีก ${formatLockRemaining(left)}`;
+        }
+      }, 1000);
+    }
+    return true;
+  } else {
+    input.disabled = false;
+    if (submitBtn) submitBtn.disabled = false;
+    if (pinLockTimer) { clearInterval(pinLockTimer); pinLockTimer = null; }
+    return false;
+  }
+}
+
 function getPin() {
   return PIN_HASH; // hash ฝังในไฟล์
 }
@@ -3639,7 +3715,8 @@ function openPinModal(callback) {
   document.getElementById('pin-input').value = '';
   document.getElementById('pin-input').classList.remove('pin-error');
   document.getElementById('pin-modal-overlay').style.display = 'flex';
-  setTimeout(() => document.getElementById('pin-input').focus(), 100);
+  const locked = updatePinLockUI();
+  if (!locked) setTimeout(() => document.getElementById('pin-input').focus(), 100);
 }
 
 function closePinModal() {
@@ -3649,6 +3726,11 @@ function closePinModal() {
 
 async function submitPin() {
   const input = document.getElementById('pin-input');
+  // เช็คว่ากำลังถูกล็อกจากการใส่ผิดเกิน 3 ครั้งอยู่หรือไม่
+  if (updatePinLockUI()) {
+    showToast('กรุณารอให้ครบเวลาที่กำหนดก่อนลองใหม่', 'error');
+    return;
+  }
   const val = input.value.trim();
   if (val.length !== 4 || !/^[0-9]{4}$/.test(val)) {
     input.style.borderColor = '#ef4444';
@@ -3663,6 +3745,7 @@ async function submitPin() {
   const hashArray = Array.from(new Uint8Array(hashBuffer));
   const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   if (hashHex === PIN_HASH) {
+    clearPinFailures();
     closePinModal();
     setAdminMode(true);
     showToast('เข้าโหมดแก้ไขแล้ว', 'success');
@@ -3671,7 +3754,13 @@ async function submitPin() {
     input.value = '';
     input.style.borderColor = '#ef4444';
     setTimeout(() => input.style.borderColor = '#d1d5db', 600);
-    showToast('PIN ไม่ถูกต้อง', 'error');
+    const failCount = recordPinFailure();
+    if (getPinLockRemainingMs() > 0) {
+      updatePinLockUI();
+      showToast(`ใส่ PIN ผิดเกิน ${PIN_MAX_ATTEMPTS} ครั้ง กรุณารออีก 30 นาที`, 'error');
+    } else {
+      showToast(`PIN ไม่ถูกต้อง (ผิด ${failCount}/${PIN_MAX_ATTEMPTS} ครั้ง)`, 'error');
+    }
   }
 }
 
@@ -3693,7 +3782,7 @@ function requireAdmin(fn) {
     <input type="password" id="pin-input" maxlength="4" inputmode="numeric" placeholder="••••"
       style="width:100%;height:48px;font-size:28px;letter-spacing:10px;text-align:center;border:2px solid #d1d5db;border-radius:10px;outline:none;font-family:monospace;box-sizing:border-box;"
       onkeydown="if(event.key==='Enter')submitPin()">
-    <button onclick="submitPin()"
+    <button id="pin-submit-btn" onclick="submitPin()"
       style="margin-top:16px;width:100%;height:44px;background:var(--primary);color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer;font-family:var(--font);">ยืนยัน</button>
     <br><button onclick="closePinModal()"
       style="margin-top:10px;background:none;border:none;color:#9ca3af;cursor:pointer;font-size:13px;">ยกเลิก</button>
