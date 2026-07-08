@@ -4132,7 +4132,11 @@ async function gsLoadAllFromSheets() {
       const rows = await gsReadSheet(tab);
       if (rows.length > 0) {
         DB[tab] = rows;
-        saveLS(tab);
+        // สำคัญ: ใช้ _origSaveLS (บันทึกลง localStorage อย่างเดียว) ไม่ใช่ saveLS ที่ถูก patch ไว้
+        // เพราะ saveLS จะ trigger sync "เขียนกลับ" ขึ้น Sheets ทันที — ถ้าเพิ่ง "ดึงข้อมูล" มา
+        // แล้วรีบ "เขียนกลับ" ทันที อาจไปแย่งจังหวะ (race condition) กับการบันทึกของผู้ใช้ที่เพิ่งแก้ไข
+        // ไปพร้อมกัน ทำให้ข้อมูลที่เพิ่งบันทึกถูกข้อมูลเก่าที่เพิ่งดึงมาทับโดยไม่ได้ตั้งใจ
+        _origSaveLS(tab);
         invalidateThumbCache(tab); // ล้าง cache ทั้ง tab เพราะข้อมูลใหม่มาแล้ว
       }
     }
