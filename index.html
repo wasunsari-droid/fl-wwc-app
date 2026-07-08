@@ -611,7 +611,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
         <table>
           <thead><tr>
             <th style="width:44px">#</th>
-            <th>วันที่</th><th>เลขเล่ม-เลขที่</th><th>เบอร์รถ</th><th>โมเดล</th><th>เลขเฟรม</th>
+            <th>วันที่</th><th>เลขเล่ม-เลขที่</th><th>เบอร์รถ</th><th>โมเดล</th><th>เลขเฟรม</th><th style="width:80px">เลขชั่วโมง</th>
             <th>ประเภทงาน</th><th>รายการอะไหล่</th><th>จำนวน</th><th>รูปใบงาน</th>
             <th style="width:110px">จัดการ</th>
           </tr></thead>
@@ -2168,7 +2168,7 @@ async function renderWork() {
   yearSel.value = curYear;
 
   let rows = DB.work.filter(r => {
-    const match = !q || ['เบอร์รถ','โมเดล','เลขเฟรม','ประเภทงาน','รายการอไหล่','เลขเล่ม-เลขที่','เลขใบขอซื้อ'].some(k => (r[k]||'').toLowerCase().includes(q));
+    const match = !q || ['เบอร์รถ','โมเดล','เลขเฟรม','เลขชั่วโมง','ประเภทงาน','รายการอไหล่','เลขเล่ม-เลขที่','เลขใบขอซื้อ'].some(k => (r[k]||'').toLowerCase().includes(q));
     if (!match) return false;
     if (fType  && !(r['ประเภทงาน']||'').split(',').map(s=>s.trim()).includes(fType)) return false;
     if (fYear  && !(r['วันที่']||'').startsWith(fYear)) return false;
@@ -2196,7 +2196,7 @@ async function renderWork() {
   const pageRows = rows.slice(start, start + PER_PAGE);
   const tbody = document.getElementById('tbody-work');
   if (!pageRows.length) {
-    tbody.innerHTML = '<tr class="empty-row"><td colspan="11">ไม่พบข้อมูล</td></tr>';
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="12">ไม่พบข้อมูล</td></tr>';
   } else {
     tbody.innerHTML = pageRows.map((r, i) => {
       const realIdx = DB.work.indexOf(r);
@@ -2207,6 +2207,7 @@ async function renderWork() {
         <td>${r['เบอร์รถ']||'-'}</td>
         <td>${r['โมเดล']||'-'}</td>
         <td style="font-size:12px">${r['เลขเฟรม']||'-'}</td>
+        <td style="font-size:13px;font-weight:500">${r['เลขชั่วโมง']||'-'}</td>
         <td>${r['ประเภทงาน'] ? r['ประเภทงาน'].split(',').map(t=>t.trim()).filter(Boolean).map(t=>`<span class="badge badge-amber" style="margin:1px 2px;display:inline-block">${t}</span>`).join('') : '-'}</td>
         <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r['รายการอไหล่']||''}">${r['รายการอไหล่']||''}</td>
         <td>${r['จำนวน']||''}</td>
