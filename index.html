@@ -2168,7 +2168,7 @@ async function renderWork() {
   yearSel.value = curYear;
 
   let rows = DB.work.filter(r => {
-    const match = !q || ['เบอร์รถ','โมเดล','เลขเฟรม','เลขชั่วโมง','ประเภทงาน','รายการอไหล่','เลขเล่ม-เลขที่','เลขใบขอซื้อ'].some(k => (r[k]||'').toLowerCase().includes(q));
+    const match = !q || ['เบอร์รถ','โมเดล','เลขเฟรม','ประเภทงาน','รายการอไหล่','เลขเล่ม-เลขที่','เลขใบขอซื้อ'].some(k => (r[k]||'').toLowerCase().includes(q));
     if (!match) return false;
     if (fType  && !(r['ประเภทงาน']||'').split(',').map(s=>s.trim()).includes(fType)) return false;
     if (fYear  && !(r['วันที่']||'').startsWith(fYear)) return false;
